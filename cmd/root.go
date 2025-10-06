@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/phergul/TerraSnap/internal/config"
@@ -15,12 +16,12 @@ var rootCmd = &cobra.Command{
 			return nil
 		}
 
-		cfg, err := config.InitConfig()
+		cfg, err := config.LoadConfig()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to load config: %w\ntry running 'tfsnap init' first", err)
 		}
 
-		cmd.SetContext(config.ToContext(cmd.Context(), &cfg))
+		cmd.SetContext(cfg.ToContext(cmd.Context()))	
 		return nil
 	},
 }

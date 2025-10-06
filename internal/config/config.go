@@ -6,43 +6,55 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
 )
 
-type Config struct {
-	Provider struct {
-		Name              string `yaml:"name"`
-		LocalBuildCommand string `yaml:"local_build_command"`
-	} `yaml:"provider"`
-	SnapshotDirectory string `yaml:"snapshot_directory"`
+type Provider struct {
+	Name              string `yaml:"name"`
+	LocalBuildCommand string `yaml:"local_build_command"`
+	ProviderDirectory string `yaml:"provider_directory"`
 }
 
-func InitConfig() (Config, error) {
-	var cfg Config
+type Config struct {
+	Provider          Provider `yaml:"provider"`
+}
 
-	workingDir, err := os.Getwd()
+var configDir string
+
+func (c *Config) WriteConfig(filePath string) error {
+	configDir = filePath
+
+	data, err := yaml.Marshal(c)
 	if err != nil {
-		return cfg, fmt.Errorf("failed to get working directory: %w", err)
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	configDir := filepath.Join(workingDir, ".tfsnap")
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(configDir)
-
-	viper.SetDefault("snapshot_directory", filepath.Join(configDir, "snapshots"))
-
-	if err := viper.ReadInConfig(); err != nil {
-		return cfg, fmt.Errorf("error reading config file: %w", err)
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
 	}
 
-	if err := viper.Unmarshal(&cfg); err != nil {
-		return cfg, fmt.Errorf("error parsing config: %w", err)
-	}
+	return nil
+}
 
-	if cfg.Provider.Name == "" {
-		return cfg, fmt.Errorf("provider name is not set in config")
-	}
+func LoadConfig() (Config, error) {
+    var cfg Config
 
-	return cfg, nil
+    if _, err := os.Stat(configDir); os.IsNotExist(err) {
+        return cfg, fmt.Errorf("config directory does not exist: %s", configDir)
+    }
+
+    v := viper.New()
+    v.SetConfigName("config")
+    v.SetConfigType("yaml")
+    v.AddConfigPath(configDir)
+    v.SetDefault("snapshot_directory", filepath.Join(configDir, "snapshots"))
+
+    if err := v.ReadInConfig(); err != nil {
+        return cfg, fmt.Errorf("error reading config file: %w", err)
+    }
+    if err := v.Unmarshal(&cfg); err != nil {
+        return cfg, fmt.Errorf("error parsing config: %w", err)
+    }
+
+    return cfg, nil
 }

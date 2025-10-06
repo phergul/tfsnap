@@ -4,14 +4,12 @@ import (
 	"context"
 )
 
-var configKey = "tfsnap_config"
-
-func ToContext(ctx context.Context, cfg *Config) context.Context {
-	return context.WithValue(ctx, configKey, cfg)
+func (c *Config) ToContext(ctx context.Context) context.Context {
+	return context.WithValue(ctx, c, c)
 }
 
-func FromContext(ctx context.Context) *Config {
-	if cfg, ok := ctx.Value(configKey).(*Config); ok {
+func (c *Config) FromContext(ctx context.Context) *Config {
+	if cfg, ok := ctx.Value(c).(*Config); ok {
 		return cfg
 	}
 	return nil
