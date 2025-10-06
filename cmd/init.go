@@ -5,7 +5,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/spf13/cobra"
+)
+
+var (
+	providerName      string
+	localBuildCommand string
+	providerDirectory string
 )
 
 var initCmd = &cobra.Command{
@@ -23,6 +30,35 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("TerraSnap is already initialized in this directory")
 		}
 
+		if err := os.Mkdir(configDir, 0755); err != nil {
+			return fmt.Errorf("failed to create config directory: %w", err)
+		}
+
+		config := config.Config{
+			Provider: config.Provider{
+				Name:              providerName,
+				LocalBuildCommand: localBuildCommand,
+				ProviderDirectory: providerDirectory,
+			},
+		}
+
+		configFile := filepath.Join(configDir, "config.yaml")
+		if err := config.WriteConfig(configFile); err != nil {
+			return err
+		}
+
+		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
+			return fmt.Errorf("failed to create snapshots directory: %w", err)
+		}
+
+		fmt.Printf("Initialized TerraSnap in %s\n", configDir)
 		return nil
 	},
+}
+
+func init() {
+	initCmd.Flags().StringVarP(&providerName, "provider", "p", "", "Terraform provider name (required)")
+	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
+	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
+	initCmd.MarkFlagRequired("provider")
 }
