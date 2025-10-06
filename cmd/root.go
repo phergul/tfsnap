@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"log"
 	"os"
 
 	"github.com/phergul/TerraSnap/internal/config"
@@ -12,6 +11,10 @@ var rootCmd = &cobra.Command{
 	Use:   "tfsnap",
 	Short: "A CLI tool for managing terraform developer snapshots",
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if cmd.Name() == "init" {
+			return nil
+		}
+
 		cfg, err := config.InitConfig()
 		if err != nil {
 			return err
@@ -22,14 +25,13 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func main() {
-	if err := rootCmd.Execute(); err != nil {
-		log.Println(err)
-		os.Exit(1)
-	}
-}
-
 func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(saveCmd)
+}
+
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
