@@ -15,14 +15,6 @@ var (
 	providerDirectory string
 )
 
-func init() {
-	initCmd.Flags().StringVarP(&providerName, "provider", "p", "", "Terraform provider name (required)")
-	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
-	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
-	initCmd.MarkFlagRequired("provider")
-	initCmd.MarkFlagRequired("build-command")
-}
-
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize TerraSnap in the current directory",
@@ -35,7 +27,7 @@ var initCmd = &cobra.Command{
 		configDir := filepath.Join(workingDir, ".tfsnap")
 
 		if _, err := os.Stat(configDir); !os.IsNotExist(err) {
-			return fmt.Errorf("TerraSnap is already initialized in this directory\n")
+			return fmt.Errorf("TerraSnap is already initialized in this directory")
 		}
 
 		if err := os.Mkdir(configDir, 0755); err != nil {
@@ -55,7 +47,18 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
+		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
+			return fmt.Errorf("failed to create snapshots directory: %w", err)
+		}
+
 		fmt.Printf("Initialized TerraSnap in %s\n", configDir)
 		return nil
 	},
+}
+
+func init() {
+	initCmd.Flags().StringVarP(&providerName, "provider", "p", "", "Terraform provider name (required)")
+	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
+	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
+	initCmd.MarkFlagRequired("provider")
 }

@@ -11,12 +11,12 @@ import (
 
 type Provider struct {
 	Name              string `yaml:"name"`
-	LocalBuildCommand string `yaml:"local_build_command"`
-	ProviderDirectory string `yaml:"provider_directory"`
+	LocalBuildCommand string `yaml:"local_build_command,omitempty"`
+	ProviderDirectory string `yaml:"provider_directory,omitempty"`
 }
 
 type Config struct {
-	Provider          Provider `yaml:"provider"`
+	Provider Provider `yaml:"provider"`
 }
 
 var configDir string
@@ -37,24 +37,24 @@ func (c *Config) WriteConfig(filePath string) error {
 }
 
 func LoadConfig() (Config, error) {
-    var cfg Config
+	var cfg Config
 
-    if _, err := os.Stat(configDir); os.IsNotExist(err) {
-        return cfg, fmt.Errorf("config directory does not exist: %s", configDir)
-    }
+	if _, err := os.Stat(configDir); os.IsNotExist(err) {
+		return cfg, fmt.Errorf("config directory does not exist: %s", configDir)
+	}
 
-    v := viper.New()
-    v.SetConfigName("config")
-    v.SetConfigType("yaml")
-    v.AddConfigPath(configDir)
-    v.SetDefault("snapshot_directory", filepath.Join(configDir, "snapshots"))
+	v := viper.New()
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(configDir)
+	v.SetDefault("snapshot_directory", filepath.Join(configDir, "snapshots"))
 
-    if err := v.ReadInConfig(); err != nil {
-        return cfg, fmt.Errorf("error reading config file: %w", err)
-    }
-    if err := v.Unmarshal(&cfg); err != nil {
-        return cfg, fmt.Errorf("error parsing config: %w", err)
-    }
+	if err := v.ReadInConfig(); err != nil {
+		return cfg, fmt.Errorf("error reading config file: %w", err)
+	}
+	if err := v.Unmarshal(&cfg); err != nil {
+		return cfg, fmt.Errorf("error parsing config: %w", err)
+	}
 
-    return cfg, nil
+	return cfg, nil
 }
