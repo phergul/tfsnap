@@ -20,11 +20,18 @@ var SaveCmd = &cobra.Command{
 			return
 		}
 
-		err := snapshot.BuildSnapshotMetadata(cfg, args[0])
+		metadata, err := snapshot.BuildSnapshotMetadata(cfg, args[0])
 		if err != nil {
 			fmt.Printf("Failed to build snapshot: %v\n", err)
 			return
 		}
+
+		err = snapshot.CopyTerraformFiles(cfg, metadata)
+		if err != nil {
+			fmt.Printf("Failed to copy terraform files: %v\n", err)
+			return
+		}
+
 		fmt.Printf("Built snapshot successfully")
 	},
 }
