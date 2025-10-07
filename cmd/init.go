@@ -36,6 +36,7 @@ var initCmd = &cobra.Command{
 		}
 
 		fullProviderDir := buildProviderDir(providerDirectory)
+		log.Printf("Using provider directory: %s", fullProviderDir)
 
 		config := config.Config{
 			WorkingDirectory: workingDir,
@@ -45,19 +46,24 @@ var initCmd = &cobra.Command{
 				ProviderDirectory: fullProviderDir,
 			},
 		}
-		log.Printf("init config %+v", config)
-
-		configFile := filepath.Join(configDir, "config.yaml")
-		if err := config.WriteConfig(configFile); err != nil {
-			return err
-		}
+		testingConfig := config
+		testingConfig.Provider.ProviderDirectory = "../terraform-provider-genesyscloud"
+		testingConfig.Provider.LocalBuildCommand = "make sideload"
+		testingConfig.Provider.Name = "mypurecloud/genesyscloud"
+		config = testingConfig
+		log.Printf("init config %+v", testingConfig)
 
 		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
 			return fmt.Errorf("failed to create snapshots directory: %w", err)
 		}
 		config.SnapshotDirectory = filepath.Join(configDir, "snapshots")
 
-		fmt.Printf("Initialized TerraSnap in %s\n", configDir)
+		configFile := filepath.Join(configDir, "config.yaml")
+		if err := config.WriteConfig(configFile); err != nil {
+			return err
+		}
+
+		fmt.Printf("Initialized TerraSnap in %s\n", workingDir)
 		return nil
 	},
 }
@@ -66,7 +72,6 @@ func init() {
 	initCmd.Flags().StringVarP(&providerName, "provider", "p", "", "Terraform provider name (required)")
 	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
 	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
-	initCmd.MarkFlagRequired("provider")
 }
 
 func buildProviderDir(dir string) string {

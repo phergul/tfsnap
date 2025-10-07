@@ -2,10 +2,10 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -42,17 +42,16 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf("failed to locate config file: %w", err)
 	}
 
-	v := viper.New()
-	v.SetConfigFile(cfgFile)
-	v.SetConfigType("yaml")
-
-	if err := v.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
 		return cfg, fmt.Errorf("error reading config file: %w", err)
 	}
-	if err := v.Unmarshal(&cfg); err != nil {
-		return cfg, fmt.Errorf("error parsing config: %w", err)
+
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("error parsing config yaml: %w", err)
 	}
 
+	log.Printf("Loaded config from %s: %+v", cfgFile, cfg)
 	return cfg, nil
 }
 
@@ -62,9 +61,17 @@ func buildConfigPath() (string, error) {
 		return "", fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	cfgPath := filepath.Join(dir, ".tfsnap", "config.yaml")
-	if _, err := os.Stat(cfgPath); err == nil {
-		return cfgPath, nil
+	for {
+		cfgPath := filepath.Join(dir, ".tfsnap", "config.yaml")
+		if _, err := os.Stat(cfgPath); err == nil {
+			return cfgPath, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
 	return "", fmt.Errorf("config file not found")
