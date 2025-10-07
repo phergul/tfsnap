@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -34,13 +35,17 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 
+		fullProviderDir := buildProviderDir(providerDirectory)
+
 		config := config.Config{
+			WorkingDirectory: workingDir,
 			Provider: config.Provider{
 				Name:              providerName,
 				LocalBuildCommand: localBuildCommand,
-				ProviderDirectory: providerDirectory,
+				ProviderDirectory: fullProviderDir,
 			},
 		}
+		log.Printf("init config %+v", config)
 
 		configFile := filepath.Join(configDir, "config.yaml")
 		if err := config.WriteConfig(configFile); err != nil {
@@ -50,6 +55,7 @@ var initCmd = &cobra.Command{
 		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
 			return fmt.Errorf("failed to create snapshots directory: %w", err)
 		}
+		config.SnapshotDirectory = filepath.Join(configDir, "snapshots")
 
 		fmt.Printf("Initialized TerraSnap in %s\n", configDir)
 		return nil
@@ -61,4 +67,18 @@ func init() {
 	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
 	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
 	initCmd.MarkFlagRequired("provider")
+}
+
+func buildProviderDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return dir
+	}
+	return filepath.Join(wd, dir)
 }

@@ -16,14 +16,12 @@ type Provider struct {
 }
 
 type Config struct {
-	Provider Provider `yaml:"provider"`
+	WorkingDirectory  string   `yaml:"working_directory"`
+	Provider          Provider `yaml:"provider"`
+	SnapshotDirectory string   `yaml:"snapshot_directory"`
 }
 
-var configDir string
-
 func (c *Config) WriteConfig(filePath string) error {
-	configDir = filePath
-
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
@@ -39,15 +37,14 @@ func (c *Config) WriteConfig(filePath string) error {
 func LoadConfig() (Config, error) {
 	var cfg Config
 
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		return cfg, fmt.Errorf("config directory does not exist: %s", configDir)
+	cfgFile, err := buildConfigPath()
+	if err != nil {
+		return cfg, fmt.Errorf("failed to locate config file: %w", err)
 	}
 
 	v := viper.New()
-	v.SetConfigName("config")
+	v.SetConfigFile(cfgFile)
 	v.SetConfigType("yaml")
-	v.AddConfigPath(configDir)
-	v.SetDefault("snapshot_directory", filepath.Join(configDir, "snapshots"))
 
 	if err := v.ReadInConfig(); err != nil {
 		return cfg, fmt.Errorf("error reading config file: %w", err)
@@ -57,4 +54,18 @@ func LoadConfig() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func buildConfigPath() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	cfgPath := filepath.Join(dir, ".tfsnap", "config.yaml")
+	if _, err := os.Stat(cfgPath); err == nil {
+		return cfgPath, nil
+	}
+
+	return "", fmt.Errorf("config file not found")
 }
