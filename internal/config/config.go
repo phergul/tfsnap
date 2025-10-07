@@ -13,6 +13,7 @@ type Provider struct {
 	Name              string `yaml:"name"`
 	LocalBuildCommand string `yaml:"local_build_command,omitempty"`
 	ProviderDirectory string `yaml:"provider_directory,omitempty"`
+	LocalAlias        string `yaml:"local_alias,omitempty"`
 }
 
 type Config struct {

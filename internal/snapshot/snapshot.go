@@ -1,67 +1,92 @@
 package snapshot
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	"github.com/phergul/TerraSnap/internal/config"
 )
 
-type Provider struct {
-	Name       string `json:"name"`
-	Version    string `json:"version"`
-	SchemaFile string `json:"schema_file"`
-	Binary     string `json:"binary"`
+type ProviderInfo struct {
+	Name             string `json:"name"`
+	Source           string `json:"source"`
+	NormalisedSource string `json:"normalised_source"`
+	Version          string `json:"version"`
+	SchemaFile       string `json:"schema_file"`
+	Binary           string `json:"binary"`
 }
 
 type Metadata struct {
-	Id        string   `json:"id"`
-	CreatedAt string   `json:"created_at"`
-	Provider  Provider `json:"provider"`
+	Id        string       `json:"id"`
+	CreatedAt string       `json:"created_at"`
+	Provider  ProviderInfo `json:"provider"`
 }
 
-func BuildSnapshot(dir, name string) (*Metadata, error) {
-	provider, err := detectProvider(dir)
+func BuildSnapshotMetadata(cfg *config.Config, name string) error {
+	provider, err := detectProvider(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to detect provider: %w", err)
+		return fmt.Errorf("failed to detect provider: %w", err)
 	}
 
 	snapshotTime := getCurrentTime()
-	if name == "" {
-		name = fmt.Sprintf("dev-%s", snapshotTime)
-	}
 
-	return &Metadata{
+	metadata := &Metadata{
 		Id:        name,
 		CreatedAt: snapshotTime,
 		Provider:  *provider,
-	}, nil
+	}
+
+	metadataFile := fmt.Sprintf("%s.json", metadata.Id)
+	metadataFilepath := filepath.Join(cfg.SnapshotDirectory, metadataFile)
+	file, err := os.Create(metadataFilepath)
+	if err != nil {
+		return fmt.Errorf("failed to create %s file: %w", metadataFile, err)
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(metadata); err != nil {
+		return fmt.Errorf("failed to write metadata to file: %w", err)
+	}
+
+	fmt.Printf("Snapshot metadata saved to %s", metadataFile)
+	return nil
 }
 
-func detectProvider(dir string) (*Provider, error) {
-	module, diag := tfconfig.LoadModule(dir)
+func detectProvider(cfg *config.Config) (*ProviderInfo, error) {
+	module, diag := tfconfig.LoadModule(cfg.WorkingDirectory)
 	if diag != nil && diag.Err() != nil {
 		return nil, fmt.Errorf("failed to load terraform module: %w", diag.Err())
 	}
 
-	providers := map[string]string{}
-	for name, req := range module.RequiredProviders {
-		providers[name] = req.VersionConstraints[0]
+	if len(module.RequiredProviders) == 0 {
+		return nil, fmt.Errorf("no providers found in %s", module.Path)
+	} else if len(module.RequiredProviders) > 1 {
+		return nil, fmt.Errorf("multiple providers detected, only one is supported")
 	}
 
-	switch len(providers) {
-	case 0:
-		return nil, fmt.Errorf("no providers detected in %s", module.Path)
-	case 1:
-		for n, v := range providers {
-			return &Provider{
-				Name:    n,
-				Version: v,
-			}, nil
+	var provider ProviderInfo
+	for name, req := range module.RequiredProviders {
+		normalised := normaliseProviderSource(req.Source, cfg)
+		provider = ProviderInfo{
+			Name:             name,
+			Version:          req.VersionConstraints[0],
+			Source:           req.Source,
+			NormalisedSource: normalised,
 		}
 	}
 
-	return nil, fmt.Errorf("multiple providers detected in %s, please specify one explicitly", module.Path)
+	return &provider, nil
+}
+
+func normaliseProviderSource(source string, cfg *config.Config) string {
+	if cfg == nil || cfg.Provider.LocalAlias == "" {
+		return source
+	}
+	return cfg.Provider.LocalAlias
 }
 
 func getCurrentTime() string {

@@ -14,6 +14,7 @@ var (
 	providerName      string
 	localBuildCommand string
 	providerDirectory string
+	localAlias        string
 )
 
 var initCmd = &cobra.Command{
@@ -44,12 +45,14 @@ var initCmd = &cobra.Command{
 				Name:              providerName,
 				LocalBuildCommand: localBuildCommand,
 				ProviderDirectory: fullProviderDir,
+				LocalAlias:        localAlias,
 			},
 		}
 		testingConfig := config
 		testingConfig.Provider.ProviderDirectory = "../terraform-provider-genesyscloud"
 		testingConfig.Provider.LocalBuildCommand = "make sideload"
 		testingConfig.Provider.Name = "mypurecloud/genesyscloud"
+		testingConfig.Provider.LocalAlias = "genesys.com/mypurecloud/genesyscloud"
 		config = testingConfig
 		log.Printf("init config %+v", testingConfig)
 
@@ -69,9 +72,10 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
-	initCmd.Flags().StringVarP(&providerName, "provider", "p", "", "Terraform provider name (required)")
-	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
-	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
+	initCmd.Flags().StringVar(&providerName, "provider", "", "Terraform provider name (required)")
+	initCmd.Flags().StringVar(&localBuildCommand, "build-command", "", "Local build command for the provider")
+	initCmd.Flags().StringVar(&providerDirectory, "provider-dir", "", "Provider directory path")
+	initCmd.Flags().StringVar(&localAlias, "local-alias", "", "Local alias for the provider development version")
 }
 
 func buildProviderDir(dir string) string {
