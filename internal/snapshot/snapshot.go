@@ -15,11 +15,12 @@ import (
 
 type ProviderInfo struct {
 	Name             string `json:"name"`
-	Source           string `json:"source"`
-	NormalisedSource string `json:"normalised_source"`
-	Version          string `json:"version"`
-	SchemaFile       string `json:"schema_file"`
-	Binary           string `json:"binary"`
+	DetectedSource   string `json:"detected_source"`
+	DetectedVersion  string `json:"detected_version"`
+	NormalizedSource string `json:"normalized_source,omitempty"`
+	IsLocalBuild     bool   `json:"is_local_build"`
+	SchemaFile       string `json:"schema_file,omitempty"`
+	Binary           string `json:"binary,omitempty"`
 }
 
 type Metadata struct {
@@ -74,23 +75,59 @@ func detectProvider(cfg *config.Config) (*ProviderInfo, error) {
 
 	var provider ProviderInfo
 	for name, req := range module.RequiredProviders {
-		normalised := normaliseProviderSource(req.Source, cfg)
+		detectedSource := req.Source
+		detectedVersion := ""
+		if len(req.VersionConstraints) > 0 {
+			detectedVersion = req.VersionConstraints[0]
+		}
+		normalizedSource, isLocal := normalizeProviderSource(detectedSource, cfg)
+
 		provider = ProviderInfo{
 			Name:             name,
-			Version:          req.VersionConstraints[0],
-			Source:           req.Source,
-			NormalisedSource: normalised,
+			DetectedSource:   detectedSource,
+			DetectedVersion:  detectedVersion,
+			NormalizedSource: normalizedSource,
+			IsLocalBuild:     isLocal,
 		}
 	}
 
 	return &provider, nil
 }
 
-func normaliseProviderSource(source string, cfg *config.Config) string {
-	if cfg == nil || cfg.Provider.LocalAlias == "" {
-		return source
+func normalizeProviderSource(detectedSource string, cfg *config.Config) (string, bool) {
+	mapping := cfg.Provider.SourceMapping
+	if detectedSource == mapping.LocalSource {
+		return mapping.RegistrySource, true
 	}
-	return cfg.Provider.LocalAlias
+	if detectedSource == mapping.RegistrySource {
+		return mapping.RegistrySource, false
+	}
+
+	// fallback to pattern-based detection
+	if isLikelyLocalSource(detectedSource) {
+		normalized := extractNormalizedSource(detectedSource)
+		return normalized, true
+	}
+
+	return detectedSource, false
+}
+
+func isLikelyLocalSource(source string) bool {
+	if strings.Contains(source, ".com/") ||
+		strings.Contains(source, ".io/") ||
+		strings.Contains(source, ".net/") ||
+		strings.Contains(source, ".org/") {
+		return true
+	}
+	return false
+}
+
+func extractNormalizedSource(source string) string {
+	parts := strings.Split(source, "/")
+	if len(parts) >= 2 {
+		return strings.Join(parts[len(parts)-2:], "/")
+	}
+	return source
 }
 
 func getCurrentTime() string {
@@ -138,7 +175,7 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	defer in.Close()
-	
+
 	out, err := os.Create(dst)
 	if err != nil {
 		return err

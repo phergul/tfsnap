@@ -9,11 +9,16 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+type SourceMapping struct {
+	LocalSource    string `yaml:"local_source"`
+	RegistrySource string `yaml:"registry_source"`
+}
+
 type Provider struct {
-	Name              string `yaml:"name"`
-	LocalBuildCommand string `yaml:"local_build_command,omitempty"`
-	ProviderDirectory string `yaml:"provider_directory,omitempty"`
-	LocalAlias        string `yaml:"local_alias,omitempty"`
+	Name              string        `yaml:"name"`
+	LocalBuildCommand string        `yaml:"local_build_command,omitempty"`
+	ProviderDirectory string        `yaml:"provider_directory,omitempty"`
+	SourceMapping     SourceMapping `yaml:"source_mappings,omitempty"`
 }
 
 type Config struct {

@@ -14,7 +14,6 @@ var (
 	providerName      string
 	localBuildCommand string
 	providerDirectory string
-	localAlias        string
 )
 
 var initCmd = &cobra.Command{
@@ -39,30 +38,32 @@ var initCmd = &cobra.Command{
 		fullProviderDir := buildProviderDir(providerDirectory)
 		log.Printf("Using provider directory: %s", fullProviderDir)
 
-		config := config.Config{
+		newConfig := config.Config{
 			WorkingDirectory: workingDir,
 			Provider: config.Provider{
 				Name:              providerName,
 				LocalBuildCommand: localBuildCommand,
 				ProviderDirectory: fullProviderDir,
-				LocalAlias:        localAlias,
 			},
 		}
-		testingConfig := config
+		testingConfig := newConfig
 		testingConfig.Provider.ProviderDirectory = "../terraform-provider-genesyscloud"
 		testingConfig.Provider.LocalBuildCommand = "make sideload"
 		testingConfig.Provider.Name = "mypurecloud/genesyscloud"
-		testingConfig.Provider.LocalAlias = "genesys.com/mypurecloud/genesyscloud"
-		config = testingConfig
+		testingConfig.Provider.SourceMapping = config.SourceMapping{
+			LocalSource:    "genesys.com/mypurecloud/genesyscloud",
+			RegistrySource: "mypurecloud/genesyscloud",
+		}
+		newConfig = testingConfig
 		log.Printf("init config %+v", testingConfig)
 
 		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
 			return fmt.Errorf("failed to create snapshots directory: %w", err)
 		}
-		config.SnapshotDirectory = filepath.Join(configDir, "snapshots")
+		newConfig.SnapshotDirectory = filepath.Join(configDir, "snapshots")
 
 		configFile := filepath.Join(configDir, "config.yaml")
-		if err := config.WriteConfig(configFile); err != nil {
+		if err := newConfig.WriteConfig(configFile); err != nil {
 			return err
 		}
 
@@ -75,7 +76,6 @@ func init() {
 	initCmd.Flags().StringVar(&providerName, "provider", "", "Terraform provider name (required)")
 	initCmd.Flags().StringVar(&localBuildCommand, "build-command", "", "Local build command for the provider")
 	initCmd.Flags().StringVar(&providerDirectory, "provider-dir", "", "Provider directory path")
-	initCmd.Flags().StringVar(&localAlias, "local-alias", "", "Local alias for the provider development version")
 }
 
 func buildProviderDir(dir string) string {

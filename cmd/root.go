@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/phergul/TerraSnap/cmd/snapshot"
 	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/spf13/cobra"
 )
@@ -29,7 +28,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(snapshot.SaveCmd)
+	rootCmd.AddCommand(snapshotCmd)
 }
 
 func Execute() {
