@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -34,31 +35,59 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
 
-		config := config.Config{
+		fullProviderDir := buildProviderDir(providerDirectory)
+		log.Printf("Using provider directory: %s", fullProviderDir)
+
+		newConfig := config.Config{
+			WorkingDirectory: workingDir,
 			Provider: config.Provider{
 				Name:              providerName,
 				LocalBuildCommand: localBuildCommand,
-				ProviderDirectory: providerDirectory,
+				ProviderDirectory: fullProviderDir,
 			},
 		}
-
-		configFile := filepath.Join(configDir, "config.yaml")
-		if err := config.WriteConfig(configFile); err != nil {
-			return err
+		testingConfig := newConfig
+		testingConfig.Provider.ProviderDirectory = "../terraform-provider-genesyscloud"
+		testingConfig.Provider.LocalBuildCommand = "make sideload"
+		testingConfig.Provider.Name = "mypurecloud/genesyscloud"
+		testingConfig.Provider.SourceMapping = config.SourceMapping{
+			LocalSource:    "genesys.com/mypurecloud/genesyscloud",
+			RegistrySource: "mypurecloud/genesyscloud",
 		}
+		newConfig = testingConfig
+		log.Printf("init config %+v", testingConfig)
 
 		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
 			return fmt.Errorf("failed to create snapshots directory: %w", err)
 		}
+		newConfig.SnapshotDirectory = filepath.Join(configDir, "snapshots")
 
-		fmt.Printf("Initialized TerraSnap in %s\n", configDir)
+		configFile := filepath.Join(configDir, "config.yaml")
+		if err := newConfig.WriteConfig(configFile); err != nil {
+			return err
+		}
+
+		fmt.Printf("Initialized TerraSnap in %s\n", workingDir)
 		return nil
 	},
 }
 
 func init() {
-	initCmd.Flags().StringVarP(&providerName, "provider", "p", "", "Terraform provider name (required)")
-	initCmd.Flags().StringVarP(&localBuildCommand, "build-command", "b", "", "Local build command for the provider (required)")
-	initCmd.Flags().StringVarP(&providerDirectory, "provider-dir", "d", "", "Provider directory (required)")
-	initCmd.MarkFlagRequired("provider")
+	initCmd.Flags().StringVar(&providerName, "provider", "", "Terraform provider name (required)")
+	initCmd.Flags().StringVar(&localBuildCommand, "build-command", "", "Local build command for the provider")
+	initCmd.Flags().StringVar(&providerDirectory, "provider-dir", "", "Provider directory path")
+}
+
+func buildProviderDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	if filepath.IsAbs(dir) {
+		return dir
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return dir
+	}
+	return filepath.Join(wd, dir)
 }

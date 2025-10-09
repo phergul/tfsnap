@@ -2,28 +2,32 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
-	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 )
 
+type SourceMapping struct {
+	LocalSource    string `yaml:"local_source"`
+	RegistrySource string `yaml:"registry_source"`
+}
+
 type Provider struct {
-	Name              string `yaml:"name"`
-	LocalBuildCommand string `yaml:"local_build_command,omitempty"`
-	ProviderDirectory string `yaml:"provider_directory,omitempty"`
+	Name              string        `yaml:"name"`
+	LocalBuildCommand string        `yaml:"local_build_command,omitempty"`
+	ProviderDirectory string        `yaml:"provider_directory,omitempty"`
+	SourceMapping     SourceMapping `yaml:"source_mappings,omitempty"`
 }
 
 type Config struct {
-	Provider Provider `yaml:"provider"`
+	WorkingDirectory  string   `yaml:"working_directory"`
+	Provider          Provider `yaml:"provider"`
+	SnapshotDirectory string   `yaml:"snapshot_directory"`
 }
 
-var configDir string
-
 func (c *Config) WriteConfig(filePath string) error {
-	configDir = filePath
-
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
@@ -39,22 +43,42 @@ func (c *Config) WriteConfig(filePath string) error {
 func LoadConfig() (Config, error) {
 	var cfg Config
 
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		return cfg, fmt.Errorf("config directory does not exist: %s", configDir)
+	cfgFile, err := buildConfigPath()
+	if err != nil {
+		return cfg, fmt.Errorf("failed to locate config file: %w", err)
 	}
 
-	v := viper.New()
-	v.SetConfigName("config")
-	v.SetConfigType("yaml")
-	v.AddConfigPath(configDir)
-	v.SetDefault("snapshot_directory", filepath.Join(configDir, "snapshots"))
-
-	if err := v.ReadInConfig(); err != nil {
+	data, err := os.ReadFile(cfgFile)
+	if err != nil {
 		return cfg, fmt.Errorf("error reading config file: %w", err)
 	}
-	if err := v.Unmarshal(&cfg); err != nil {
-		return cfg, fmt.Errorf("error parsing config: %w", err)
+
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("error parsing config yaml: %w", err)
 	}
 
+	log.Printf("Loaded config from %s: %+v", cfgFile, cfg)
 	return cfg, nil
+}
+
+func buildConfigPath() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	for {
+		cfgPath := filepath.Join(dir, ".tfsnap", "config.yaml")
+		if _, err := os.Stat(cfgPath); err == nil {
+			return cfgPath, nil
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return "", fmt.Errorf("config file not found")
 }

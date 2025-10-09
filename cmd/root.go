@@ -21,14 +21,14 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w\ntry running 'tfsnap init' first", err)
 		}
 
-		cmd.SetContext(cfg.ToContext(cmd.Context()))	
+		cmd.SetContext(config.ToContext(cmd.Context(), &cfg))
 		return nil
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(initCmd)
-	rootCmd.AddCommand(saveCmd)
+	rootCmd.AddCommand(snapshotCmd)
 }
 
 func Execute() {
