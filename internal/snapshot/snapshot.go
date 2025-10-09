@@ -3,7 +3,6 @@ package snapshot
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/phergul/TerraSnap/internal/config"
+	"github.com/phergul/TerraSnap/internal/util"
 )
 
 type ProviderInfo struct {
@@ -137,51 +137,40 @@ func getCurrentTime() string {
 }
 
 func CopyTerraformFiles(cfg *config.Config, metadata *Metadata) error {
-	return copyTFFiles(cfg.WorkingDirectory, filepath.Join(cfg.SnapshotDirectory, metadata.Id, "terraform"))
+	return util.CopyTFFiles(cfg.WorkingDirectory, filepath.Join(cfg.SnapshotDirectory, metadata.Id, "terraform"), false)
 }
 
-func copyTFFiles(src string, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
+func LoadSnapshot(cfg *config.Config, name string) (*Metadata, error) {
+	snapshotDir := filepath.Join(cfg.SnapshotDirectory, name)
+	metadataFile := filepath.Join(snapshotDir, "metadata.json")
 
-		if strings.Contains(path, ".tfsnap") {
-			return nil
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if !(strings.HasSuffix(path, ".tf") || strings.HasSuffix(path, ".tfvars") || strings.HasSuffix(path, "terraform.lock.hcl")) {
-			return nil
-		}
+	metadata, err := readMetadata(metadataFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load snapshot metadata: %w", err)
+	}
 
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-		targetPath := filepath.Join(dst, rel)
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
-			return err
-		}
+	err = loadTFFiles(filepath.Join(snapshotDir, "terraform"), cfg.WorkingDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load terraform files: %w", err)
+	}
 
-		return copyFile(path, targetPath)
-	})
+	return metadata, nil
 }
 
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
+func readMetadata(filePath string) (*Metadata, error) {
+	file, err := os.Open(filePath)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to open metadata file: %w", err)
 	}
-	defer in.Close()
+	defer file.Close()
 
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
+	var metadata Metadata
+	if err := json.NewDecoder(file).Decode(&metadata); err != nil {
+		return nil, fmt.Errorf("failed to decode metadata JSON: %w", err)
 	}
-	defer out.Close()
+	return &metadata, nil
+}
 
-	_, err = io.Copy(out, in)
-	return err
+func loadTFFiles(snapshotTerraformDir, destDir string) error {
+	return util.CopyTFFiles(snapshotTerraformDir, destDir, true)
 }

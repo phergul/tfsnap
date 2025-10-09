@@ -1,8 +1,8 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
 	"github.com/phergul/TerraSnap/cmd/snapshot"
+	"github.com/spf13/cobra"
 )
 
 var snapshotCmd = &cobra.Command{
@@ -12,4 +12,5 @@ var snapshotCmd = &cobra.Command{
 
 func init() {
 	snapshotCmd.AddCommand(snapshot.SaveCmd)
+	snapshotCmd.AddCommand(snapshot.LoadCmd)
 }
