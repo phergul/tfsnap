@@ -13,26 +13,21 @@ import (
 	"github.com/phergul/TerraSnap/internal/util"
 )
 
-type ProviderInfo struct {
-	Name             string `json:"name"`
-	DetectedSource   string `json:"detected_source"`
-	DetectedVersion  string `json:"detected_version"`
-	NormalizedSource string `json:"normalized_source,omitempty"`
-	IsLocalBuild     bool   `json:"is_local_build"`
-	SchemaFile       string `json:"schema_file,omitempty"`
-	Binary           string `json:"binary,omitempty"`
-}
-
-type Metadata struct {
-	Id        string       `json:"id"`
-	CreatedAt string       `json:"created_at"`
-	Provider  ProviderInfo `json:"provider"`
-}
-
 func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
 	provider, err := detectProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect provider: %w", err)
+	}
+
+	if provider.IsLocalBuild {
+		binaryPath, err := findProviderBinary(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find provider binary: %w", err)
+		} else {
+			if err := captureProviderBinary(cfg, binaryPath, name, provider); err != nil {
+				return nil, fmt.Errorf("failed to capture provider binary: %w", err)
+			}
+		}
 	}
 
 	snapshotTime := getCurrentTime()
@@ -173,4 +168,74 @@ func readMetadata(filePath string) (*Metadata, error) {
 
 func loadTFFiles(snapshotTerraformDir, destDir string) error {
 	return util.CopyTFFiles(snapshotTerraformDir, destDir, true)
+}
+
+func findProviderBinary(cfg *config.Config) (string, error) {
+	if cfg.Provider.ProviderDirectory == "" {
+		return "", fmt.Errorf("provider directory not configured")
+	}
+
+	possiblePaths := []string{
+		filepath.Join(cfg.Provider.ProviderDirectory, "terraform-provider-"+cfg.Provider.Name),
+		filepath.Join(cfg.Provider.ProviderDirectory, "bin", "terraform-provider-"+cfg.Provider.Name),
+		filepath.Join(cfg.Provider.ProviderDirectory, "dist", "terraform-provider-"+cfg.Provider.Name),
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+	}
+
+	return "", fmt.Errorf("provider binary not found in %s", cfg.Provider.ProviderDirectory)
+}
+
+func captureProviderBinary(cfg *config.Config, binaryPath, snapshotName string, provider *ProviderInfo) error {
+	providerDir := filepath.Join(cfg.SnapshotDirectory, snapshotName, "provider")
+	if err := os.MkdirAll(providerDir, 0755); err != nil {
+		return fmt.Errorf("failed to create provider directory: %w", err)
+	}
+
+	hash, err := util.HashFile(binaryPath)
+	if err != nil {
+		return fmt.Errorf("failed to hash binary: %w", err)
+	}
+
+	info, err := os.Stat(binaryPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat binary: %w", err)
+	}
+
+	binaryName := filepath.Base(binaryPath)
+	destPath := filepath.Join(providerDir, binaryName)
+	
+	if err := util.CopyFile(binaryPath, destPath); err != nil {
+		return fmt.Errorf("failed to copy binary: %w", err)
+	}
+
+	if err := os.Chmod(destPath, 0755); err != nil {
+		return fmt.Errorf("failed to make binary executable: %w", err)
+	}
+
+	gitInfo := getGitInfo(cfg.Provider.ProviderDirectory)
+
+	provider.Binary = &Binary{
+		OriginalPath:       binaryPath,
+		SnapshotBinaryPath: filepath.Join("provider", binaryName),
+		Hash:               hash,
+		Size:               info.Size(),
+	}
+	provider.GitInfo = gitInfo
+
+	fmt.Printf("Provider binary captured (hash: %s, size: %.2f MB)\n", 
+		hash[:8], float64(info.Size())/1024/1024)
+	
+	if gitInfo != nil && gitInfo.Commit != "" {
+		fmt.Printf("Git info: %s (%s)\n", gitInfo.Commit[:7], gitInfo.Branch)
+		if gitInfo.IsDirty {
+			fmt.Printf("Warning: Uncommitted changes detected\n")
+		}
+	}
+
+	return nil
 }
