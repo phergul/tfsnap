@@ -20,18 +20,36 @@ var SaveCmd = &cobra.Command{
 			return
 		}
 
+		fmt.Println("Saving snapshot:", args[0])
 		metadata, err := snapshot.BuildSnapshotMetadata(cfg, args[0])
 		if err != nil {
 			fmt.Printf("Failed to build snapshot: %v\n", err)
 			return
 		}
 
+		fmt.Println("Copying terraform files...")
 		err = snapshot.CopyTerraformFiles(cfg, metadata)
 		if err != nil {
 			fmt.Printf("Failed to copy terraform files: %v\n", err)
 			return
 		}
 
-		fmt.Printf("Built snapshot successfully")
+		fmt.Printf("\nSuccessfully saved snapshot: %s\n", args[0])
+		fmt.Printf("Summary: %s@%s\n", metadata.Provider.Name, metadata.Provider.DetectedVersion)
+		if metadata.Provider.Binary != nil {
+			fmt.Printf("Provider binary: %.2f MB (hash: %s)\n",
+				float64(metadata.Provider.Binary.Size)/1024/1024,
+				metadata.Provider.Binary.Hash[:8])
+		}
+		if metadata.Provider.GitInfo != nil && metadata.Provider.GitInfo.Commit != "" {
+			fmt.Printf("Git: %s (%s)\n", metadata.Provider.GitInfo.Commit[:7], metadata.Provider.GitInfo.Branch)
+			if metadata.Provider.GitInfo.IsDirty {
+				fmt.Printf("Warning: Uncommitted changes detected\n")
+			}
+		}
 	},
+}
+
+func init() {
+	SaveCmd.Flags().StringP("description", "d", "", "Description of this snapshot")
 }

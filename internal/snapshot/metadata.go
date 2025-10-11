@@ -1,5 +1,15 @@
 package snapshot
 
+import "time"
+
+type Metadata struct {
+	Id         string           `json:"id"`
+	CreatedAt  time.Time        `json:"created_at"`
+	ModifiedAt time.Time        `json:"modified_at,omitempty"`
+	Provider   *ProviderInfo    `json:"provider"`
+	Context    *SnapshotContext `json:"context,omitempty"`
+}
+
 type ProviderInfo struct {
 	Name             string   `json:"name"`
 	DetectedSource   string   `json:"detected_source"`
@@ -9,12 +19,6 @@ type ProviderInfo struct {
 	SchemaFile       string   `json:"schema_file,omitempty"`
 	Binary           *Binary  `json:"binary,omitempty"`
 	GitInfo          *GitInfo `json:"git_info,omitempty"`
-}
-
-type Metadata struct {
-	Id        string       `json:"id"`
-	CreatedAt string       `json:"created_at"`
-	Provider  ProviderInfo `json:"provider"`
 }
 
 type GitInfo struct {
@@ -30,4 +34,8 @@ type Binary struct {
 	SnapshotBinaryPath string `json:"snapshot_binary_path"`
 	Hash               string `json:"hash"`
 	Size               int64  `json:"size"`
+}
+
+type SnapshotContext struct {
+	Description string `json:"description,omitempty"`
 }

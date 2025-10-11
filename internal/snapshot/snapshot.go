@@ -3,6 +3,7 @@ package snapshot
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,11 @@ import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/phergul/TerraSnap/internal/util"
+)
+
+const (
+	snapshotConfigFile      = "metadata.json"
+	snapshotTFConfigFileDir  = "tfconfig"
 )
 
 func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
@@ -30,15 +36,13 @@ func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
 		}
 	}
 
-	snapshotTime := getCurrentTime()
-
 	metadata := &Metadata{
 		Id:        name,
-		CreatedAt: snapshotTime,
-		Provider:  *provider,
+		CreatedAt: time.Now(),
+		Provider:  provider,
 	}
 
-	metadataFilepath := filepath.Join(cfg.SnapshotDirectory, name, "metadata.json")
+	metadataFilepath := filepath.Join(cfg.SnapshotDirectory, name, snapshotConfigFile)
 	if err := os.MkdirAll(filepath.Dir(metadataFilepath), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create snapshot directory: %w", err)
 	}
@@ -52,7 +56,7 @@ func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
 		return nil, fmt.Errorf("failed to write metadata to file: %w", err)
 	}
 
-	fmt.Printf("Snapshot metadata saved to %s", metadataFilepath)
+	log.Printf("Snapshot metadata saved to %s", metadataFilepath)
 	return metadata, nil
 }
 
@@ -132,19 +136,19 @@ func getCurrentTime() string {
 }
 
 func CopyTerraformFiles(cfg *config.Config, metadata *Metadata) error {
-	return util.CopyTFFiles(cfg.WorkingDirectory, filepath.Join(cfg.SnapshotDirectory, metadata.Id, "terraform"), false)
+	return util.CopyTFFiles(cfg.WorkingDirectory, filepath.Join(cfg.SnapshotDirectory, metadata.Id, snapshotTFConfigFileDir), false)
 }
 
 func LoadSnapshot(cfg *config.Config, name string) (*Metadata, error) {
 	snapshotDir := filepath.Join(cfg.SnapshotDirectory, name)
-	metadataFile := filepath.Join(snapshotDir, "metadata.json")
+	metadataFile := filepath.Join(snapshotDir, snapshotConfigFile)
 
 	metadata, err := readMetadata(metadataFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load snapshot metadata: %w", err)
 	}
 
-	err = loadTFFiles(filepath.Join(snapshotDir, "terraform"), cfg.WorkingDirectory)
+	err = loadTFFiles(filepath.Join(snapshotDir, snapshotTFConfigFileDir), cfg.WorkingDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load terraform files: %w", err)
 	}
@@ -208,7 +212,7 @@ func captureProviderBinary(cfg *config.Config, binaryPath, snapshotName string, 
 
 	binaryName := filepath.Base(binaryPath)
 	destPath := filepath.Join(providerDir, binaryName)
-	
+
 	if err := util.CopyFile(binaryPath, destPath); err != nil {
 		return fmt.Errorf("failed to copy binary: %w", err)
 	}
@@ -227,13 +231,13 @@ func captureProviderBinary(cfg *config.Config, binaryPath, snapshotName string, 
 	}
 	provider.GitInfo = gitInfo
 
-	fmt.Printf("Provider binary captured (hash: %s, size: %.2f MB)\n", 
+	log.Printf("Provider binary captured (hash: %s, size: %.2f MB)\n",
 		hash[:8], float64(info.Size())/1024/1024)
-	
+
 	if gitInfo != nil && gitInfo.Commit != "" {
-		fmt.Printf("Git info: %s (%s)\n", gitInfo.Commit[:7], gitInfo.Branch)
+		log.Printf("Git info: %s (%s)\n", gitInfo.Commit[:7], gitInfo.Branch)
 		if gitInfo.IsDirty {
-			fmt.Printf("Warning: Uncommitted changes detected\n")
+			log.Printf("Warning: Uncommitted changes detected\n")
 		}
 	}
 
