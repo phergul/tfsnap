@@ -69,3 +69,11 @@ func HashFile(path string) (string, error) {
 
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
+func DirExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}

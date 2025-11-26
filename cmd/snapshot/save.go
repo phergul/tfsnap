@@ -2,9 +2,12 @@ package snapshot
 
 import (
 	"fmt"
+	"log"
+	"path/filepath"
 
 	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/phergul/TerraSnap/internal/snapshot"
+	"github.com/phergul/TerraSnap/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -25,14 +28,25 @@ var SaveCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println("Saving snapshot:", args[0])
-		metadata, err := snapshot.BuildSnapshotMetadata(cfg, args[0], description, includeBinary, includeGit)
-		if err != nil {
-			fmt.Printf("Failed to build snapshot: %v\n", err)
-			return
+		var metadata *snapshot.Metadata
+		var err error
+		if !util.DirExists(filepath.Join(cfg.SnapshotDirectory, args[0])) {
+			fmt.Println("Saving snapshot:", args[0])
+			metadata, err = snapshot.BuildSnapshot(cfg, args[0], description, includeBinary, includeGit)
+			if err != nil {
+				fmt.Printf("Failed to build snapshot: %v\n", err)
+				return
+			}
+		} else {
+			fmt.Println("Updating existing snapshot:", args[0])
+			metadata, err = snapshot.UpdateSnapshot(cfg, args[0])
+			if err != nil {
+				fmt.Printf("Failed to build snapshot: %v\n", err)
+				return
+			}
 		}
 
-		fmt.Println("Copying terraform files...")
+		log.Println("Copying terraform files...")
 		err = snapshot.CopyTerraformFiles(cfg, metadata)
 		if err != nil {
 			fmt.Printf("Failed to copy terraform files: %v\n", err)
@@ -60,4 +74,3 @@ func init() {
 	SaveCmd.Flags().BoolVarP(&includeBinary, "include-binary", "b", false, "Whether to include the binary of the provider (local)")
 	SaveCmd.Flags().BoolVarP(&includeGit, "include-git", "g", false, "Whether to include info on the providers git branch")
 }
-

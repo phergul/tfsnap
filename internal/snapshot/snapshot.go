@@ -19,7 +19,7 @@ const (
 	snapshotTFConfigFileDir = "tfconfig"
 )
 
-func BuildSnapshotMetadata(cfg *config.Config, name, description string, includeBinary, includeGit bool) (*Metadata, error) {
+func BuildSnapshot(cfg *config.Config, name, description string, includeBinary, includeGit bool) (*Metadata, error) {
 	provider, err := detectProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect provider: %w", err)
@@ -51,9 +51,72 @@ func BuildSnapshotMetadata(cfg *config.Config, name, description string, include
 	metadata := &Metadata{
 		Id:          name,
 		CreatedAt:   time.Now(),
+		ModifiedAt:  time.Now(),
 		Provider:    provider,
 		Description: description,
 	}
+
+	metadataFilepath := filepath.Join(cfg.SnapshotDirectory, name, snapshotConfigFile)
+	if err := os.MkdirAll(filepath.Dir(metadataFilepath), 0755); err != nil {
+		return nil, fmt.Errorf("failed to create snapshot directory: %w", err)
+	}
+	file, err := os.Create(metadataFilepath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create %s file: %w", metadataFilepath, err)
+	}
+	defer file.Close()
+
+	if err := json.NewEncoder(file).Encode(metadata); err != nil {
+		return nil, fmt.Errorf("failed to write metadata to file: %w", err)
+	}
+
+	log.Printf("Snapshot metadata saved to %s", metadataFilepath)
+	return metadata, nil
+}
+
+func UpdateSnapshot(cfg *config.Config, name string) (*Metadata, error) {
+	log.Println("Updating metedata for snapshot:", name)
+	metadata, err := readMetadata(filepath.Join(cfg.SnapshotDirectory, name, snapshotConfigFile))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load metadata: %w", err)
+	}
+
+	provider, err := detectProvider(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect provider: %w", err)
+	}
+
+	binaryIncluded := false
+	if _, err := os.Stat(filepath.Join(cfg.SnapshotDirectory, name, "binary/")); err == nil && !os.IsNotExist(err) {
+		binaryIncluded = true
+	}
+
+	if binaryIncluded && provider.IsLocalBuild {
+		binaryPath, err := findProviderBinary(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find provider binary: %w", err)
+		} else {
+			if err := captureProviderBinary(cfg, binaryPath, name, provider); err != nil {
+				return nil, fmt.Errorf("failed to capture provider binary: %w", err)
+			}
+		}
+	}
+
+	if metadata.Provider.GitInfo != nil {
+		gitInfo := getGitInfo(cfg.Provider.ProviderDirectory)
+		provider.GitInfo = gitInfo
+
+		if gitInfo != nil && gitInfo.Commit != "" {
+			log.Printf("Git info: %s (%s)\n", gitInfo.Commit[:7], gitInfo.Branch)
+			if gitInfo.IsDirty {
+				log.Printf("Warning: Uncommitted changes detected\n")
+			}
+		}
+	}
+
+	metadata.ModifiedAt = time.Now()
+	log.Println(time.Now())
+	log.Printf("updating metadata ModifiedAt --> %s\n", metadata.ModifiedAt.String())
 
 	metadataFilepath := filepath.Join(cfg.SnapshotDirectory, name, snapshotConfigFile)
 	if err := os.MkdirAll(filepath.Dir(metadataFilepath), 0755); err != nil {
