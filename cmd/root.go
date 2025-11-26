@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/spf13/cobra"
@@ -21,6 +23,14 @@ var rootCmd = &cobra.Command{
 			return fmt.Errorf("failed to load config: %w\ntry running 'tfsnap init' first", err)
 		}
 
+		file, err := os.OpenFile(filepath.Join(cfg.WorkingDirectory, ".tfsnap/tfsnap.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			return fmt.Errorf("failed to create log file: %w", err)
+		}
+
+		log.SetOutput(file)
+		log.SetFlags(log.Ldate | log.Ltime)
+
 		cmd.SetContext(config.ToContext(cmd.Context(), &cfg))
 		return nil
 	},
@@ -33,6 +43,6 @@ func init() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+		log.Fatalln(err)
 	}
 }

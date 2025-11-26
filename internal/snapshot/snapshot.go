@@ -16,16 +16,16 @@ import (
 
 const (
 	snapshotConfigFile      = "metadata.json"
-	snapshotTFConfigFileDir  = "tfconfig"
+	snapshotTFConfigFileDir = "tfconfig"
 )
 
-func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
+func BuildSnapshotMetadata(cfg *config.Config, name, description string, includeBinary, includeGit bool) (*Metadata, error) {
 	provider, err := detectProvider(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect provider: %w", err)
 	}
 
-	if provider.IsLocalBuild {
+	if includeBinary && provider.IsLocalBuild {
 		binaryPath, err := findProviderBinary(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find provider binary: %w", err)
@@ -36,10 +36,23 @@ func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
 		}
 	}
 
+	if includeGit {
+		gitInfo := getGitInfo(cfg.Provider.ProviderDirectory)
+		provider.GitInfo = gitInfo
+
+		if gitInfo != nil && gitInfo.Commit != "" {
+			log.Printf("Git info: %s (%s)\n", gitInfo.Commit[:7], gitInfo.Branch)
+			if gitInfo.IsDirty {
+				log.Printf("Warning: Uncommitted changes detected\n")
+			}
+		}
+	}
+
 	metadata := &Metadata{
-		Id:        name,
-		CreatedAt: time.Now(),
-		Provider:  provider,
+		Id:          name,
+		CreatedAt:   time.Now(),
+		Provider:    provider,
+		Description: description,
 	}
 
 	metadataFilepath := filepath.Join(cfg.SnapshotDirectory, name, snapshotConfigFile)
@@ -221,25 +234,15 @@ func captureProviderBinary(cfg *config.Config, binaryPath, snapshotName string, 
 		return fmt.Errorf("failed to make binary executable: %w", err)
 	}
 
-	gitInfo := getGitInfo(cfg.Provider.ProviderDirectory)
-
 	provider.Binary = &Binary{
 		OriginalPath:       binaryPath,
 		SnapshotBinaryPath: filepath.Join("provider", binaryName),
 		Hash:               hash,
 		Size:               info.Size(),
 	}
-	provider.GitInfo = gitInfo
 
 	log.Printf("Provider binary captured (hash: %s, size: %.2f MB)\n",
 		hash[:8], float64(info.Size())/1024/1024)
-
-	if gitInfo != nil && gitInfo.Commit != "" {
-		log.Printf("Git info: %s (%s)\n", gitInfo.Commit[:7], gitInfo.Branch)
-		if gitInfo.IsDirty {
-			log.Printf("Warning: Uncommitted changes detected\n")
-		}
-	}
 
 	return nil
 }

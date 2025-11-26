@@ -3,11 +3,12 @@ package snapshot
 import "time"
 
 type Metadata struct {
-	Id         string           `json:"id"`
-	CreatedAt  time.Time        `json:"created_at"`
-	ModifiedAt time.Time        `json:"modified_at,omitempty"`
-	Provider   *ProviderInfo    `json:"provider"`
-	Context    *SnapshotContext `json:"context,omitempty"`
+	Id          string           `json:"id"`
+	CreatedAt   time.Time        `json:"created_at"`
+	ModifiedAt  time.Time        `json:"modified_at"`
+	Provider    *ProviderInfo    `json:"provider"`
+	Context     *SnapshotContext `json:"context,omitempty"`
+	Description string           `json:"description,omitempty"`
 }
 
 type ProviderInfo struct {
