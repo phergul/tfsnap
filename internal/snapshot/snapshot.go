@@ -3,6 +3,7 @@ package snapshot
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ func BuildSnapshotMetadata(cfg *config.Config, name string) (*Metadata, error) {
 		return nil, fmt.Errorf("failed to write metadata to file: %w", err)
 	}
 
-	fmt.Printf("Snapshot metadata saved to %s", metadataFilepath)
+	log.Printf("Snapshot metadata saved to %s", metadataFilepath)
 	return metadata, nil
 }
 
