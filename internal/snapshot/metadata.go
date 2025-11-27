@@ -1,14 +1,16 @@
 package snapshot
 
-import "time"
+import (
+	"time"
+)
 
 type Metadata struct {
-	Id          string           `json:"id"`
-	CreatedAt   time.Time        `json:"created_at"`
-	ModifiedAt  time.Time        `json:"modified_at"`
-	Provider    *ProviderInfo    `json:"provider"`
-	Context     *SnapshotContext `json:"context,omitempty"`
-	Description string           `json:"description,omitempty"`
+	Id             string          `json:"id"`
+	CreatedAt      time.Time       `json:"created_at"`
+	ModifiedAt     time.Time       `json:"modified_at"`
+	Provider       *ProviderInfo   `json:"provider"`
+	Description    string          `json:"description,omitempty"`
+	ConfigAnalysis *ConfigAnalysis `json:"config_analysis,omitempty"`
 }
 
 type ProviderInfo struct {
@@ -37,6 +39,12 @@ type Binary struct {
 	Size               int64  `json:"size"`
 }
 
-type SnapshotContext struct {
-	Description string `json:"description,omitempty"`
+type ConfigAnalysis struct {
+	Resources  map[string]Resource `json:"resources,omitempty"`
+	TotalCount int
+}
+
+type Resource struct {
+	Type  string `json:"type,omitempty"`
+	Count int    `json:"count,omitempty"`
 }

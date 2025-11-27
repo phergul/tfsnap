@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/spf13/cobra"
@@ -29,6 +30,8 @@ var rootCmd = &cobra.Command{
 		log.SetOutput(file)
 		log.SetFlags(log.Ldate | log.Ltime)
 
+		log.Printf("[%s] Start", strings.ToUpper(cmd.Name()))
+
 		cfg, err := config.LoadConfig()
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w\ntry running 'tfsnap init' first", err)
@@ -43,6 +46,7 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(snapshotCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(completionCmd)
 }
 
 func Execute() {

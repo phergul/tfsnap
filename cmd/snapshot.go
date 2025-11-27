@@ -13,4 +13,6 @@ var snapshotCmd = &cobra.Command{
 func init() {
 	snapshotCmd.AddCommand(snapshot.SaveCmd)
 	snapshotCmd.AddCommand(snapshot.LoadCmd)
+	snapshotCmd.AddCommand(snapshot.ListCmd)
+	snapshotCmd.AddCommand(snapshot.DeleteCmd)
 }

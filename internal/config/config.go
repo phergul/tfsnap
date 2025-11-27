@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -57,7 +56,7 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf("error parsing config yaml: %w", err)
 	}
 
-	log.Printf("Loaded config from %s: %+v", cfgFile, cfg)
+	// log.Printf("Loaded config from %s: %+v", cfgFile, cfg)
 	return cfg, nil
 }
 
