@@ -40,6 +40,7 @@ var versionCmd = &cobra.Command{
 		if local {
 			if cfg.Provider.SourceMapping.LocalSource == "" {
 				fmt.Println("LocalSource must be set in tfsnap config to use local version")
+				return
 			}
 			newContent = sourceRe.ReplaceAllString(newContent, fmt.Sprintf(`source = "%s"`, cfg.Provider.SourceMapping.LocalSource))
 		} else {

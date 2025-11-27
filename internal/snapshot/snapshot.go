@@ -24,10 +24,10 @@ func BuildSnapshot(cfg *config.Config, name, description string, includeBinary, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect provider: %w", err)
 	}
+	log.Printf("Including binary: %v, Including git: %v\n", includeBinary, includeGit)
 
 	if includeBinary && provider.IsLocalBuild {
-		binaryPath, err := findProviderBinary(cfg)
-		if err != nil {
+		if binaryPath, err := findProviderBinary(cfg); err != nil {
 			return nil, fmt.Errorf("failed to find provider binary: %w", err)
 		} else {
 			if err := captureProviderBinary(cfg, binaryPath, name, provider); err != nil {
@@ -37,6 +37,7 @@ func BuildSnapshot(cfg *config.Config, name, description string, includeBinary, 
 	}
 
 	if includeGit {
+		log.Printf("Getting git info from provider dir: %s\n", cfg.Provider.ProviderDirectory)
 		gitInfo := getGitInfo(cfg.Provider.ProviderDirectory)
 		provider.GitInfo = gitInfo
 

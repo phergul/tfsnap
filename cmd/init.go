@@ -47,7 +47,7 @@ var initCmd = &cobra.Command{
 			},
 		}
 		testingConfig := newConfig
-		testingConfig.Provider.ProviderDirectory = "../terraform-provider-genesyscloud"
+		testingConfig.Provider.ProviderDirectory = "../../../College/fyp/terraform-provider-genesyscloud"
 		testingConfig.Provider.LocalBuildCommand = "make sideload"
 		testingConfig.Provider.Name = "genesyscloud"
 		testingConfig.Provider.SourceMapping = config.SourceMapping{

@@ -41,7 +41,7 @@ var SaveCmd = &cobra.Command{
 			fmt.Println("Updating existing snapshot:", args[0])
 			metadata, err = snapshot.UpdateSnapshot(cfg, args[0])
 			if err != nil {
-				fmt.Printf("Failed to build snapshot: %v\n", err)
+				fmt.Printf("Failed to update snapshot: %v\n", err)
 				return
 			}
 		}

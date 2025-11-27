@@ -18,7 +18,7 @@ type Provider struct {
 	Name              string        `yaml:"name"`
 	LocalBuildCommand string        `yaml:"local_build_command,omitempty"`
 	ProviderDirectory string        `yaml:"provider_directory,omitempty"`
-	SourceMapping     SourceMapping `yaml:"source_mappings,omitempty"`
+	SourceMapping     SourceMapping `yaml:"source_mappings"`
 }
 
 type Config struct {
