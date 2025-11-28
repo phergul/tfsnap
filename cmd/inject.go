@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const tempDir = "./tmp-module"
+
 var version string
 
 var InjectCmd = &cobra.Command{
@@ -24,7 +26,6 @@ var InjectCmd = &cobra.Command{
 			return
 		}
 
-		tempDir := "./tmp-module"
 		os.MkdirAll(tempDir, 0755)
 
 		err := inject.CreateTempModule(cfg, tempDir)
@@ -61,6 +62,11 @@ var InjectCmd = &cobra.Command{
 		}
 		if err = inject.InjectResource(cfg, resourceName, version); err != nil {
 			fmt.Printf("Injection failed: %v\n", err)
+		}
+	},
+	PostRun: func(cmd *cobra.Command, args []string) {
+		if err := os.RemoveAll(tempDir); err != nil {
+			log.Println("failed to delete temp dir")
 		}
 	},
 }

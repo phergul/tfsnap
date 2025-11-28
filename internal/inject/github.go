@@ -184,6 +184,7 @@ func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType
 		)
 	}
 
+	// TODO: have some way to choose which example when there are mulitple
 	block, err := extractFirstResourceBlock(text, resourceType)
 	if err != nil {
 		return nil, err
@@ -197,7 +198,6 @@ func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType
 	}, nil
 }
 
-// TODO: have some way to choose which example when there are mulitple
 func extractFirstResourceBlock(content, resourceType string) (string, error) {
 	target := fmt.Sprintf(`resource "%s"`, resourceType)
 	idx := strings.Index(content, target)
