@@ -5,9 +5,9 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/phergul/TerraSnap/internal/config"
-	"github.com/phergul/TerraSnap/internal/snapshot"
-	"github.com/phergul/TerraSnap/internal/util"
+	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/terrasnap/internal/snapshot"
+	"github.com/phergul/terrasnap/internal/util"
 	"github.com/spf13/cobra"
 )
 

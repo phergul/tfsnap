@@ -3,8 +3,8 @@ package snapshot
 import (
 	"fmt"
 
-	"github.com/phergul/TerraSnap/internal/config"
-	"github.com/phergul/TerraSnap/internal/snapshot"
+	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/terrasnap/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
