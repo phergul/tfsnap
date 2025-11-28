@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	tfjson "github.com/hashicorp/terraform-json"
-	"github.com/phergul/TerraSnap/internal/config"
+	"github.com/phergul/terrasnap/internal/config"
 )
 
 func CreateTempModule(cfg *config.Config, dir string) error {

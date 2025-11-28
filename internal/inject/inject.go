@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
-	"github.com/phergul/TerraSnap/internal/config"
+	"github.com/phergul/terrasnap/internal/config"
 	"golang.org/x/mod/semver"
 )
 

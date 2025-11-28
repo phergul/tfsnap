@@ -1,4 +1,4 @@
-module github.com/phergul/TerraSnap
+module github.com/phergul/terrasnap
 
 go 1.25.4
 

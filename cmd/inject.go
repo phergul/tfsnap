@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/phergul/TerraSnap/internal/config"
-	"github.com/phergul/TerraSnap/internal/inject"
+	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/terrasnap/internal/inject"
 	"github.com/spf13/cobra"
 )
 
