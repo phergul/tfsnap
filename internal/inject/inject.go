@@ -13,7 +13,7 @@ import (
 
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/phergul/TerraSnap/internal/config"
-	"github.com/rogpeppe/go-internal/semver"
+	"golang.org/x/mod/semver"
 )
 
 type TFResource struct {
@@ -22,20 +22,6 @@ type TFResource struct {
 		Description string `json:"description"`
 		Code        string `json:"code"`
 	} `json:"examples"`
-}
-
-type ProviderMetadata struct {
-	ID        string `json:"id"`
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-	Source    string `json:"source"`
-}
-
-type GitHubContent struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	DownloadURL string `json:"download_url"`
-	Type        string `json:"type"`
 }
 
 type ProviderVersion struct {
@@ -100,138 +86,13 @@ func getResourceExample(registrySource, resourceType, version string) (string, e
 		return "", fmt.Errorf("failed to get provider repo: %w", err)
 	}
 
-	examples, err := getGithubExamples(providerRepoUrl, providerVersion)
+	example, err := findGithubExample(providerRepoUrl, providerVersion, resourceType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get examples from github repo (%s): %w", providerRepoUrl, err)
 	}
 
-	// url := fmt.Sprintf("https://registry.terraform.io/providers/%s/%s/docs/resources/%s", registrySource, providerVersion, resourceType)
-	//
-	// resp, err := http.Get(url)
-	// if err != nil {
-	// 	return "", err
-	// }
-	// defer resp.Body.Close()
-	//
-	// body, _ := io.ReadAll(resp.Body)
-	// log.Println(string(body))
-	//
-	// if resp.StatusCode != http.StatusOK {
-	// 	return "", fmt.Errorf("failed to fetch resource: %s", resp.Status)
-	// }
-	//
-	// doc, err := goquery.NewDocumentFromReader(resp.Body)
-	// if err != nil {
-	// 	return "", err
-	// }
-	// doc.Find("code.terraform.language-terraform").Each(func(i int, s *goquery.Selection) {
-	// 	log.Println("Found code block:", s.Length())
-	// })
-	//
-	// //manually parse the examples from the registry html
-	// code := doc.Find("code.terraform.language-terraform").First()
-	// if code.Length() == 0 {
-	// 	return "", fmt.Errorf("no exmaples found for %s", resourceType)
-	// }
-	//
-	// hcl := code.Text()
-	// hcl = strings.TrimSpace(hcl)
-	//
-	// parts := strings.Split(hcl, `\nresource "`)
-	// examples := make([]string, 0, len(parts))
-	//
-	// for i, part := range parts {
-	// 	block := strings.TrimSpace(part)
-	// 	if block == "" {
-	// 		continue
-	// 	}
-	//
-	// 	if i != 0 {
-	// 		block = `resource "` + block
-	// 	}
-	// 	examples = append(examples, block)
-	// }
-
-	if len(examples) == 0 {
-		return "", fmt.Errorf("no resource examples found for %s", resourceType)
-	}
-
-	if len(examples) > 1 {
-		fmt.Printf("Mulitple examples found for %s. Injecting the first.", resourceType)
-	}
-
 	// TODO: have some way to select if multiple examples
-	return examples[0], nil
-}
-
-func getProviderRepo(registrySource string) (string, error) {
-	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s", registrySource)
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("failed to fetch provider metadata: %s", resp.Status)
-	}
-
-	var meta ProviderMetadata
-	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
-		return "", err
-	}
-
-	if meta.Source == "" {
-		return "", fmt.Errorf("repository URL not found for provider %s", strings.Split(registrySource, "/")[:1])
-	}
-
-	return meta.Source, nil
-}
-
-func getGithubExamples(repoUrl, version string) ([]string, error) {
-	owner, name, err := parseGithubURL(repoUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	githubAPI := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/examples", owner, name)
-	if version != "" {
-		githubAPI += "?ref=" + version
-	}
-
-	log.Println("github api url:", githubAPI)
-	resp, err := http.Get(githubAPI)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch github api: %s", resp.Status)
-	}
-
-	var contents []GitHubContent
-	if err := json.NewDecoder(resp.Body).Decode(&contents); err != nil {
-		return nil, err
-	}
-
-	log.Println(contents)
-
-	return nil, nil
-}
-
-func parseGithubURL(url string) (owner, repo string, err error) {
-	url = strings.TrimSuffix(url, ".git")
-
-	url = strings.TrimPrefix(url, "https://github.com/")
-	url = strings.TrimPrefix(url, "http://github.com/")
-	url = strings.TrimPrefix(url, "git@github.com:")
-
-	parts := strings.Split(url, "/")
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("invalid Github URL: %s", url)
-	}
-	return parts[0], parts[1], nil
+	return example.Content, nil
 }
 
 func getAvailableProviderVersions(registrySource string) ([]string, error) {
@@ -266,10 +127,6 @@ func getAvailableProviderVersions(registrySource string) ([]string, error) {
 	sort.Slice(versionList, func(i, j int) bool {
 		return semver.Compare(versionList[i], versionList[j]) > 0
 	})
-
-	// for _, v := range versionList {
-	// 	log.Println(v)
-	// }
 
 	return versionList, nil
 }

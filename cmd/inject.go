@@ -56,7 +56,7 @@ var InjectCmd = &cobra.Command{
 		}
 
 		resourceName := args[0]
-		if after, ok := strings.CutPrefix(resourceName, "genesyscloud_"); ok {
+		if after, ok := strings.CutPrefix(resourceName, fmt.Sprintf("%s_", cfg.Provider.Name)); ok {
 			resourceName = after
 		}
 		if err = inject.InjectResource(cfg, resourceName, version); err != nil {
