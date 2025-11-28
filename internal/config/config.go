@@ -39,12 +39,18 @@ func (c *Config) WriteConfig(filePath string) error {
 	return nil
 }
 
-func LoadConfig() (Config, error) {
+func LoadConfig(yamlFile string) (Config, error) {
 	var cfg Config
 
-	cfgFile, err := buildConfigPath()
-	if err != nil {
-		return cfg, fmt.Errorf("failed to locate config file: %w", err)
+	var cfgFile string
+	var err error
+	if yamlFile == "" {
+		cfgFile, err = buildConfigPath()
+		if err != nil {
+			return cfg, fmt.Errorf("failed to locate config file: %w", err)
+		}
+	} else {
+		cfgFile = yamlFile
 	}
 
 	data, err := os.ReadFile(cfgFile)
@@ -52,7 +58,7 @@ func LoadConfig() (Config, error) {
 		return cfg, fmt.Errorf("error reading config file: %w", err)
 	}
 
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err = yaml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("error parsing config yaml: %w", err)
 	}
 

@@ -32,7 +32,7 @@ var rootCmd = &cobra.Command{
 
 		log.Printf("[%s] Start", strings.ToUpper(cmd.Name()))
 
-		cfg, err := config.LoadConfig()
+		cfg, err := config.LoadConfig("")
 		if err != nil {
 			return fmt.Errorf("failed to load config: %w\ntry running 'tfsnap init' first", err)
 		}

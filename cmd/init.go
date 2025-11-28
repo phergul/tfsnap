@@ -1,20 +1,17 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/phergul/TerraSnap/internal/config"
 	"github.com/spf13/cobra"
 )
 
-var (
-	providerName      string
-	localBuildCommand string
-	providerDirectory string
-)
+var configFileFlag string
 
 var initCmd = &cobra.Command{
 	Use:   "init",
@@ -34,36 +31,46 @@ var initCmd = &cobra.Command{
 		if err := os.Mkdir(configDir, 0755); err != nil {
 			return fmt.Errorf("failed to create config directory: %w", err)
 		}
+		var cfg config.Config
+		if configFileFlag != "" {
+			fmt.Println("Loading configuration from:", configFileFlag)
 
-		fullProviderDir := buildProviderDir(providerDirectory)
-		log.Printf("Using provider directory: %s", fullProviderDir)
+			loaded, err := config.LoadConfig(configFileFlag)
+			if err != nil {
+				return fmt.Errorf("failed to read config file: %w", err)
+			}
 
-		newConfig := config.Config{
-			WorkingDirectory: workingDir,
-			Provider: config.Provider{
-				Name:              providerName,
-				LocalBuildCommand: localBuildCommand,
-				ProviderDirectory: fullProviderDir,
-			},
+			cfg = loaded
+		} else {
+			reader := bufio.NewReader(os.Stdin)
+
+			providerName := prompt(reader, "Enter provider name (e.g., aws)")
+			providerDir := prompt(reader, "Enter provider directory path")
+			localSource := prompt(reader, "Enter local source mapping")
+			registrySource := prompt(reader, "Enter registry source mapping")
+
+			fullProviderDir := buildProviderDir(providerDir)
+
+			cfg = config.Config{
+				WorkingDirectory: workingDir,
+				Provider: config.Provider{
+					Name:              providerName,
+					ProviderDirectory: fullProviderDir,
+					SourceMapping: config.SourceMapping{
+						LocalSource:    localSource,
+						RegistrySource: registrySource,
+					},
+				},
+			}
 		}
-		testingConfig := newConfig
-		testingConfig.Provider.ProviderDirectory = "../../../College/fyp/terraform-provider-genesyscloud"
-		testingConfig.Provider.LocalBuildCommand = "make sideload"
-		testingConfig.Provider.Name = "genesyscloud"
-		testingConfig.Provider.SourceMapping = config.SourceMapping{
-			LocalSource:    "genesys.com/mypurecloud/genesyscloud",
-			RegistrySource: "mypurecloud/genesyscloud",
-		}
-		newConfig = testingConfig
-		log.Printf("init config %+v", testingConfig)
 
 		if err := os.Mkdir(filepath.Join(configDir, "snapshots"), 0755); err != nil {
 			return fmt.Errorf("failed to create snapshots directory: %w", err)
 		}
-		newConfig.SnapshotDirectory = filepath.Join(configDir, "snapshots")
+		cfg.SnapshotDirectory = filepath.Join(configDir, "snapshots")
 
 		configFile := filepath.Join(configDir, "config.yaml")
-		if err := newConfig.WriteConfig(configFile); err != nil {
+		if err := cfg.WriteConfig(configFile); err != nil {
 			return err
 		}
 
@@ -73,9 +80,7 @@ var initCmd = &cobra.Command{
 }
 
 func init() {
-	initCmd.Flags().StringVar(&providerName, "provider", "", "Terraform provider name (required)")
-	initCmd.Flags().StringVar(&localBuildCommand, "build-command", "", "Local build command for the provider")
-	initCmd.Flags().StringVar(&providerDirectory, "provider-dir", "", "Provider directory path")
+	initCmd.Flags().StringVarP(&configFileFlag, "config", "c", "", "Load TerraSnap config from YAML file")
 }
 
 func buildProviderDir(dir string) string {
@@ -90,4 +95,10 @@ func buildProviderDir(dir string) string {
 		return dir
 	}
 	return filepath.Join(wd, dir)
+}
+
+func prompt(reader *bufio.Reader, message string) string {
+	fmt.Print(message + ": ")
+	input, _ := reader.ReadString('\n')
+	return strings.TrimSpace(input)
 }
