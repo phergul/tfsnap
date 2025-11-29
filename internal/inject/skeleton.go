@@ -48,7 +48,7 @@ func renderBlock(block *tfjson.SchemaBlock, indent int) string {
 			continue
 		}
 		if attr.Required || attr.Optional {
-			out.WriteString(indentStr + getEmptyValue(key, *attr, indent))
+			out.WriteString(getEmptyValue(key, *attr, indent))
 		}
 	}
 
@@ -70,27 +70,35 @@ func renderBlock(block *tfjson.SchemaBlock, indent int) string {
 
 func getEmptyValue(key string, v tfjson.SchemaAttribute, indent int) string {
 	log.Printf("%s::%s [R: %t] [O: %t] [C: %t]", key, v.AttributeType.FriendlyName(), v.Required, v.Optional, v.Computed)
+	indentStr := strings.Repeat("\t", indent)
+
 	switch v.AttributeType.FriendlyName() {
 	case "string":
 		log.Printf("%s, with indent %d", key, indent)
-		return fmt.Sprintf("%s = \"\"\n", key)
+		return fmt.Sprintf("%s%s = \"\"\n", indentStr, key)
 	case "bool":
 		log.Printf("%s, with indent %d", key, indent)
-		return fmt.Sprintf("%s = false\n", key)
+		return fmt.Sprintf("%s%s = false\n", indentStr, key)
 	case "number":
 		log.Printf("%s, with indent %d", key, indent)
-		return fmt.Sprintf("%s = 0\n", key)
+		return fmt.Sprintf("%s%s = 0\n", indentStr, key)
 	case "list of string", "set of string":
 		log.Printf("%s, with indent %d", key, indent)
-		return fmt.Sprintf("%s = [ ]\n", key)
+		return fmt.Sprintf("%s%s = [ ]\n", indentStr, key)
 	case "object", "list of object", "set of object":
 		log.Printf("%s, with indent %d", key, indent)
 		var out strings.Builder
-		indentStr := strings.Repeat("\t", indent)
 		out.WriteString(fmt.Sprintf("%s%s {\n", indentStr, key))
 
 		elemType := v.AttributeType.ElementType()
-		for nestedKey, nestedType := range elemType.AttributeTypes() {
+		nestedKeys := make([]string, 0, len(elemType.AttributeTypes()))
+		for k := range elemType.AttributeTypes() {
+			nestedKeys = append(nestedKeys, k)
+		}
+		sort.Strings(nestedKeys)
+
+		for _, nestedKey := range nestedKeys {
+			nestedType := elemType.AttributeTypes()[nestedKey]
 			nestedAttr := &tfjson.SchemaAttribute{
 				AttributeType: nestedType,
 				Required:      v.Required,
