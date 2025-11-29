@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/google/go-github/v79/github"
+	"golang.org/x/oauth2"
 )
 
 type ProviderMetadata struct {
@@ -34,6 +36,22 @@ type ExampleResult struct {
 
 var meta ProviderMetadata
 var opts *github.RepositoryContentGetOptions
+
+func newGithubClient() *github.Client {
+	ctx := context.Background()
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		return github.NewClient(nil)
+	}
+
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: token},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+
+	client := github.NewClient(tc)
+	return client
+}
 
 func getProviderRepo(registrySource string) (string, error) {
 	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s", registrySource)
@@ -64,7 +82,7 @@ func findGithubExample(repoUrl, version, resourceType string) (*ExampleResult, e
 		return nil, err
 	}
 
-	client := github.NewClient(nil)
+	client := newGithubClient()
 
 	if version != "" {
 		opts = &github.RepositoryContentGetOptions{Ref: version}
@@ -87,7 +105,7 @@ func findGithubExample(repoUrl, version, resourceType string) (*ExampleResult, e
 			}
 
 			for _, ic := range innerContents {
-				if ic.GetType() == "dir" && strings.Contains(strings.ToLower(ic.GetName()), resourceType) {
+				if ic.GetType() == "dir" && strings.HasSuffix(strings.ToLower(ic.GetName()), resourceType) {
 					log.Println("Found example directory (resources):", ic.GetPath())
 					return searchExamplesDirectory(client, owner, repo, ic.GetPath(), resourceType)
 				}

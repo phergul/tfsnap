@@ -16,11 +16,12 @@ const tempDir = "./tmp-module"
 var version string
 var skeleton bool
 var localProvider bool
+var dependency bool
 
 var InjectCmd = &cobra.Command{
-	Use:   "inject [<resource>]",
+	Use:   "inject <resource1>, <resource2>...",
 	Short: "Manage resources example injections",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.FromContext(cmd.Context())
 		if cfg == nil {
@@ -41,6 +42,7 @@ var InjectCmd = &cobra.Command{
 			return
 		}
 
+		log.Println("Initialising temp module...")
 		errs := inject.TerraformInit(tempDir)
 		if errs != nil {
 			fmt.Println(errs[0])
@@ -48,6 +50,7 @@ var InjectCmd = &cobra.Command{
 			return
 		}
 
+		log.Println("Loading provider schemas...")
 		schemas, err := inject.LoadProviderSchemas(tempDir)
 		if err != nil {
 			fmt.Println("Injection failed: error loading provider schemas")
@@ -59,31 +62,39 @@ var InjectCmd = &cobra.Command{
 		if !localProvider {
 			schemaKey = "registry.terraform.io/" + registrySource
 		}
-		schema, valid := inject.ValidateResource(schemas, schemaKey, args[0])
-		if !valid {
-			fmt.Printf("Resource '%s' is not valid for provider %s@%s\n", args[0], cfg.Provider.Name, version)
-			return
-		}
 
-		if version != "" && !strings.HasPrefix(version, "v") {
-			version = "v" + version
-		}
-
-		if skeleton {
-			fmt.Println("Valid resource, injecting skeleton...")
-			if err = inject.InjectSkeleton(cfg, schema, args[0]); err != nil {
-				fmt.Printf("Injection failed: %v", err)
+		for _, resourceName := range args {
+			fullProviderResourceName := resourceName
+			if !strings.HasPrefix(resourceName, fmt.Sprintf("%s_", cfg.Provider.Name)) {
+				fullProviderResourceName = fmt.Sprintf("%s_%s", cfg.Provider.Name, resourceName)
 			}
-			return
-		}
 
-		resourceName := args[0]
-		if after, ok := strings.CutPrefix(resourceName, fmt.Sprintf("%s_", cfg.Provider.Name)); ok {
-			resourceName = after
-		}
-		fmt.Println("Valid Resource, injecting...")
-		if err = inject.InjectResource(cfg, resourceName, version); err != nil {
-			fmt.Printf("Injection failed: %v\n", err)
+			schema, valid := inject.ValidateResource(schemas, schemaKey, fullProviderResourceName)
+			if !valid {
+				fmt.Printf("Resource '%s' is not valid for provider %s@%s\n", args[0], cfg.Provider.Name, version)
+				return
+			}
+			fmt.Printf("Valid resource [%s]. Injecting", resourceName)
+
+			if version != "" && !strings.HasPrefix(version, "v") {
+				version = "v" + version
+			}
+
+			if skeleton {
+				fmt.Println("skeleton...")
+				if err = inject.InjectSkeleton(cfg, schema, fullProviderResourceName); err != nil {
+					fmt.Printf("Injection failed: %v", err)
+				}
+				return
+			}
+
+			if after, ok := strings.CutPrefix(resourceName, fmt.Sprintf("%s_", cfg.Provider.Name)); ok {
+				resourceName = after
+			}
+			fmt.Println("...")
+			if err = inject.InjectResource(cfg, resourceName, version); err != nil {
+				fmt.Printf("Injection failed: %v\n", err)
+			}
 		}
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
@@ -97,4 +108,5 @@ func init() {
 	InjectCmd.Flags().StringVarP(&version, "version", "v", "", "Version of the resource to inject")
 	InjectCmd.Flags().BoolVarP(&skeleton, "skeleton", "s", false, "Inject a skeleton version of the resource")
 	InjectCmd.Flags().BoolVarP(&localProvider, "local", "l", false, "Use local binary (currently only used for skeleton")
+	InjectCmd.Flags().BoolVarP(&dependency, "dependencies", "d", false, "Whether to include dependent resources in the injection")
 }

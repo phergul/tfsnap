@@ -57,13 +57,23 @@ func InjectResource(cfg *config.Config, resourceType, version string) error {
 }
 
 func writeResourceToFile(path, resource string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
 	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	_, err = file.WriteString("\n" + resource)
+	prefix := ""
+	if len(content) >= 2 && !(content[len(content)-2] == '\n' && content[len(content)-1] == '\n') {
+		prefix = "\n"
+	}
+
+	_, err = file.WriteString(prefix + resource + "\n\n")
 	return err
 }
 

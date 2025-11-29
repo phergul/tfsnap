@@ -30,7 +30,16 @@ var rootCmd = &cobra.Command{
 		log.SetOutput(file)
 		log.SetFlags(log.Ldate | log.Ltime)
 
-		log.Printf("[%s] Start", strings.ToUpper(cmd.Name()))
+		fullCmd := strings.ToUpper(cmd.Name())
+		currParent := cmd.Parent()
+		for {
+			if currParent == cmd.Root() {
+				break
+			}
+			fullCmd = strings.ToUpper(currParent.Name()) + " " + fullCmd
+			currParent = currParent.Parent()
+		}
+		log.Printf("[%s] Start", fullCmd)
 
 		cfg, err := config.LoadConfig("")
 		if err != nil {
