@@ -9,11 +9,23 @@ import (
 	"path/filepath"
 
 	tfjson "github.com/hashicorp/terraform-json"
-	"github.com/phergul/terrasnap/internal/config"
 )
 
-func CreateTempModule(cfg *config.Config, dir string) error {
-	temp := fmt.Sprintf(`
+func CreateTempModule(name, source, dir, version string) error {
+	var temp string
+	if version != "" {
+		temp = fmt.Sprintf(`
+		terraform {
+  required_providers {
+    %s = {
+      source = "%s"
+	  version = "%s"
+    }
+  }
+}
+`, name, source, version)
+	} else {
+		temp = fmt.Sprintf(`
 terraform {
   required_providers {
     %s = {
@@ -21,8 +33,8 @@ terraform {
     }
   }
 }
-`, cfg.Provider.Name, cfg.Provider.SourceMapping.RegistrySource)
-
+`, name, source)
+	}
 	log.Println("writing temp module to 'tmp/main.tf'")
 	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(temp), 0644); err != nil {
 		return fmt.Errorf("failed to write temp module: %v", err)

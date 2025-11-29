@@ -14,6 +14,8 @@ import (
 const tempDir = "./tmp-module"
 
 var version string
+var skeleton bool
+var localProvider bool
 
 var InjectCmd = &cobra.Command{
 	Use:   "inject [<resource>]",
@@ -28,7 +30,12 @@ var InjectCmd = &cobra.Command{
 
 		os.MkdirAll(tempDir, 0755)
 
-		err := inject.CreateTempModule(cfg, tempDir)
+		registrySource := cfg.Provider.SourceMapping.RegistrySource
+		if localProvider {
+			registrySource = cfg.Provider.SourceMapping.LocalSource
+		}
+
+		err := inject.CreateTempModule(cfg.Provider.Name, registrySource, tempDir, version)
 		if err != nil {
 			fmt.Printf("Injection failed: error creating temp module: %v\n", err)
 			return
@@ -38,6 +45,7 @@ var InjectCmd = &cobra.Command{
 		if errs != nil {
 			fmt.Println(errs[0])
 			log.Println(errs[1])
+			return
 		}
 
 		schemas, err := inject.LoadProviderSchemas(tempDir)
@@ -47,19 +55,33 @@ var InjectCmd = &cobra.Command{
 			return
 		}
 
-		if !inject.ValidateResource(schemas, cfg.Provider.SourceMapping.RegistrySource, args[0]) {
-			fmt.Printf("Resource '%s' is not valid for provider %s\n", args[0], cfg.Provider.Name)
+		schemaKey := registrySource
+		if !localProvider {
+			schemaKey = "registry.terraform.io/" + registrySource
 		}
-		fmt.Println("Valid Resource, injecting...")
+		schema, valid := inject.ValidateResource(schemas, schemaKey, args[0])
+		if !valid {
+			fmt.Printf("Resource '%s' is not valid for provider %s@%s\n", args[0], cfg.Provider.Name, version)
+			return
+		}
 
 		if version != "" && !strings.HasPrefix(version, "v") {
 			version = "v" + version
+		}
+
+		if skeleton {
+			fmt.Println("Valid resource, injecting skeleton...")
+			if err = inject.InjectSkeleton(cfg, schema, args[0]); err != nil {
+				fmt.Printf("Injection failed: %v", err)
+			}
+			return
 		}
 
 		resourceName := args[0]
 		if after, ok := strings.CutPrefix(resourceName, fmt.Sprintf("%s_", cfg.Provider.Name)); ok {
 			resourceName = after
 		}
+		fmt.Println("Valid Resource, injecting...")
 		if err = inject.InjectResource(cfg, resourceName, version); err != nil {
 			fmt.Printf("Injection failed: %v\n", err)
 		}
@@ -73,4 +95,6 @@ var InjectCmd = &cobra.Command{
 
 func init() {
 	InjectCmd.Flags().StringVarP(&version, "version", "v", "", "Version of the resource to inject")
+	InjectCmd.Flags().BoolVarP(&skeleton, "skeleton", "s", false, "Inject a skeleton version of the resource")
+	InjectCmd.Flags().BoolVarP(&localProvider, "local", "l", false, "Use local binary (currently only used for skeleton")
 }

@@ -32,17 +32,16 @@ type VersionResponse struct {
 	Versions []ProviderVersion `json:"versions"`
 }
 
-func ValidateResource(schemas *tfjson.ProviderSchemas, registrySource, input string) bool {
-	schemaKey := "registry.terraform.io/" + registrySource
-	log.Println("schemaKey is:", schemaKey)
+func ValidateResource(schemas *tfjson.ProviderSchemas, registrySource, input string) (*tfjson.Schema, bool) {
+	log.Println("schemaKey is:", registrySource)
 
-	providerSchema, ok := schemas.Schemas[schemaKey]
+	providerSchema, ok := schemas.Schemas[registrySource]
 	if !ok {
-		return false
+		return nil, false
 	}
 
-	_, ok = providerSchema.ResourceSchemas[input]
-	return ok
+	schema, ok := providerSchema.ResourceSchemas[input]
+	return schema, ok
 }
 
 func InjectResource(cfg *config.Config, resourceType, version string) error {
@@ -54,13 +53,17 @@ func InjectResource(cfg *config.Config, resourceType, version string) error {
 		return fmt.Errorf("failed to inject resource. Check logs for details.")
 	}
 
-	file, err := os.OpenFile(tfPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	return writeResourceToFile(tfPath, resource)
+}
+
+func writeResourceToFile(path, resource string) error {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	_, err = file.WriteString("\n" + resource + "\n")
+	_, err = file.WriteString("\n" + resource)
 	return err
 }
 
