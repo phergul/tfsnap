@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
+	"github.com/manifoldco/promptui"
 	"github.com/phergul/terrasnap/internal/config"
 	"golang.org/x/mod/semver"
 )
@@ -99,13 +100,36 @@ func getResourceExample(registrySource, resourceType, version string) (string, e
 		return "", fmt.Errorf("failed to get provider repo: %w", err)
 	}
 
-	example, err := findGithubExample(providerRepoUrl, providerVersion, resourceType)
+	examples, err := findGithubExamples(providerRepoUrl, providerVersion, resourceType)
 	if err != nil {
 		return "", fmt.Errorf("failed to get examples from github repo (%s): %w", providerRepoUrl, err)
 	}
 
-	// TODO: have some way to select if multiple examples
-	return example.Content, nil
+	if len(*examples) > 1 {
+		fmt.Printf("Multiple %s resources found\n", resourceType)
+		prompt := promptui.Select{
+			Label: fmt.Sprintf("Select %s example to inject", resourceType),
+			Items: *examples,
+			Templates: &promptui.SelectTemplates{
+				Label:    "{{ . }}:",
+				Active:   "> {{ .Name | underline }}",
+				Inactive: "  {{ .Name }}",
+				Selected: "✔ {{ .Name }}",
+			},
+		}
+
+		index, _, err := prompt.Run()
+
+		if err != nil {
+			return "", fmt.Errorf("prompt failed: %w", err)
+		}
+
+		return (*examples)[index].Content, nil
+	} else if len(*examples) == 1 {
+		return (*examples)[0].Content, nil
+	}
+
+	return "", fmt.Errorf("no example found for resource %s", resourceType)
 }
 
 func getAvailableProviderVersions(registrySource string) ([]string, error) {

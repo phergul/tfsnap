@@ -32,6 +32,7 @@ type ExampleResult struct {
 	FileName string
 	Path     string
 	Content  string
+	Name     string
 }
 
 var meta ProviderMetadata
@@ -76,7 +77,7 @@ func getProviderRepo(registrySource string) (string, error) {
 	return meta.Source, nil
 }
 
-func findGithubExample(repoUrl, version, resourceType string) (*ExampleResult, error) {
+func findGithubExamples(repoUrl, version, resourceType string) (*[]ExampleResult, error) {
 	owner, repo, err := parseGithubURL(repoUrl)
 	if err != nil {
 		return nil, err
@@ -154,29 +155,34 @@ func parseGithubURL(url string) (owner, repo string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func searchExamplesDirectory(client *github.Client, owner, repo, dirPath, resourceType string) (*ExampleResult, error) {
+func searchExamplesDirectory(client *github.Client, owner, repo, dirPath, resourceType string) (*[]ExampleResult, error) {
 	_, sub, _, err := client.Repositories.GetContents(context.Background(), owner, repo, dirPath, opts)
 	if err != nil {
 		return nil, err
 	}
 
+	var totalExamples []ExampleResult
 	for _, f := range sub {
 		if f.GetType() == "file" && strings.HasSuffix(f.GetName(), ".tf") {
 			log.Println("Found tf file:", f.GetName())
-			ex, err := fetchAndValidate(client, owner, repo, f.GetPath(), resourceType)
+			examples, err := fetchAndValidate(client, owner, repo, f.GetPath(), resourceType)
 			if err != nil {
 				log.Printf("[%s] %s", f.GetName(), err)
 				continue
 			}
-			if ex != nil {
-				return ex, nil
+			if examples != nil {
+				totalExamples = append(totalExamples, *examples...)
 			}
 		}
 	}
-	return nil, fmt.Errorf("no resource example inside %s", dirPath)
+
+	if len(totalExamples) == 0 {
+		return nil, fmt.Errorf("no examples found for resource %s", resourceType)
+	}
+	return &totalExamples, nil
 }
 
-func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType string) (*ExampleResult, error) {
+func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType string) (*[]ExampleResult, error) {
 	file, _, _, err := client.Repositories.GetContents(context.Background(), owner, repo, filePath, opts)
 	if err != nil {
 		return nil, err
@@ -195,62 +201,89 @@ func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType
 		return nil, fmt.Errorf("no resource examples found for %s", resourceType)
 	}
 
-	if len(matches) > 1 {
-		log.Printf(
-			`Found %d resources for "%s" examples in %s; using the first one.`,
-			len(matches), resourceType, file.GetName(),
-		)
-	}
-
-	// TODO: have some way to choose which example when there are mulitple
-	block, err := extractFirstResourceBlock(text, resourceType)
+	exampleBlocks, err := extractResourceBlocks(text, matches)
 	if err != nil {
 		return nil, err
 	}
 
+	results := make([]ExampleResult, 0, len(matches))
+	for _, block := range exampleBlocks {
+		name, err := extractResourceName(block, resourceType)
+		if err != nil {
+			log.Printf("Warning: %v", err)
+			name = ""
+		}
+
+		results = append(results, ExampleResult{
+			FileName: file.GetName(),
+			Path:     filePath,
+			Content:  block,
+			Name:     name,
+		})
+	}
+
 	log.Printf("Found resource example for %s in %s", resourceType, filePath)
-	return &ExampleResult{
-		FileName: file.GetName(),
-		Path:     filePath,
-		Content:  block,
-	}, nil
+	return &results, nil
 }
 
-func extractFirstResourceBlock(content, resourceType string) (string, error) {
-	target := fmt.Sprintf(`resource "%s"`, resourceType)
-	idx := strings.Index(content, target)
-	if idx == -1 {
-		return "", fmt.Errorf("resource %s not found", resourceType)
-	}
+func extractResourceBlocks(content string, indexes [][]int) ([]string, error) {
+	resources := make([]string, 0, len(indexes))
+	errors := make([]error, 0, len(indexes))
+	for _, index := range indexes {
+		start := index[0]
 
-	start := idx
+		braceIndex := strings.Index(content[start:], "{")
+		if braceIndex == -1 {
+			// return "", fmt.Errorf("malformed resource block, missing '{'")
+			errors = append(errors, fmt.Errorf("malformed resource block, missing '{'"))
+			continue
+		}
 
-	braceIndex := strings.Index(content[start:], "{")
-	if braceIndex == -1 {
-		return "", fmt.Errorf("malformed resource block, missing '{'")
-	}
+		braceIndex = start + braceIndex
 
-	braceIndex = start + braceIndex
+		depth := 0
+		end := braceIndex
+		for i := braceIndex; i < len(content); i++ {
+			c := content[i]
 
-	depth := 0
-	end := braceIndex
-	for i := braceIndex; i < len(content); i++ {
-		c := content[i]
-
-		if c == '{' {
-			depth++
-		} else if c == '}' {
-			depth--
-			if depth == 0 {
-				end = i + 1
-				break
+			if c == '{' {
+				depth++
+			} else if c == '}' {
+				depth--
+				if depth == 0 {
+					end = i + 1
+					break
+				}
 			}
 		}
+
+		if depth != 0 {
+			// return "", fmt.Errorf("unterminated resource block")
+			errors = append(errors, fmt.Errorf("unterminated resource block"))
+			continue
+		}
+
+		resources = append(resources, content[start:end])
 	}
 
-	if depth != 0 {
-		return "", fmt.Errorf("unterminated resource block")
+	if len(resources) == 0 {
+		for i, error := range errors {
+			log.Printf("Error %d: %v", i, error)
+		}
+		return nil, fmt.Errorf("no resources extracted (%d errors)", len(errors))
 	}
 
-	return content[start:end], nil
+	return resources, nil
+}
+
+func extractResourceName(block, resourceType string) (string, error) {
+	re := regexp.MustCompile(
+		fmt.Sprintf(`resource\s+"%s"\s+"([^"]+)"`, regexp.QuoteMeta(resourceType)),
+	)
+
+	match := re.FindStringSubmatch(block)
+	if len(match) < 2 {
+		return "", fmt.Errorf("could not extract resource name from block")
+	}
+	return match[1], nil
 }
