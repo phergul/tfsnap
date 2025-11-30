@@ -23,6 +23,7 @@ var initCmd = &cobra.Command{
 		}
 
 		configDir := filepath.Join(workingDir, ".tfsnap")
+		configFile := filepath.Join(configDir, "config.yaml")
 
 		if _, err := os.Stat(configDir); !os.IsNotExist(err) {
 			return fmt.Errorf("TerraSnap is already initialized in this directory")
@@ -52,6 +53,7 @@ var initCmd = &cobra.Command{
 			fullProviderDir := buildProviderDir(providerDir)
 
 			cfg = config.Config{
+				ConfigPath:       configFile,
 				WorkingDirectory: workingDir,
 				Provider: config.Provider{
 					Name:              providerName,
@@ -69,8 +71,7 @@ var initCmd = &cobra.Command{
 		}
 		cfg.SnapshotDirectory = filepath.Join(configDir, "snapshots")
 
-		configFile := filepath.Join(configDir, "config.yaml")
-		if err := cfg.WriteConfig(configFile); err != nil {
+		if err := cfg.WriteConfig(); err != nil {
 			return err
 		}
 

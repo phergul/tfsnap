@@ -43,7 +43,7 @@ terraform {
 }
 
 func TerraformInit(dir string) []error {
-	cmd := exec.Command("terraform", "init", "-no-color", "-input=false")
+	cmd := exec.Command("terraform", "init", "-no-color", "-input=false", "-backend=false")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

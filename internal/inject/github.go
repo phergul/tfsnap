@@ -2,18 +2,23 @@ package inject
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
 
 	"github.com/google/go-github/v79/github"
+	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/terrasnap/internal/util"
 	"golang.org/x/oauth2"
 )
 
+type ExampleClient struct {
+	config           *config.Config
+	client           *github.Client
+	providerMetadata ProviderMetadata
+}
 type ProviderMetadata struct {
 	ID        string `json:"id"`
 	Namespace string `json:"namespace"`
@@ -35,8 +40,29 @@ type ExampleResult struct {
 	Name     string
 }
 
-var meta ProviderMetadata
-var opts *github.RepositoryContentGetOptions
+type ExampleSearchStrategy string
+
+const (
+	StrategyNone          ExampleSearchStrategy = ""
+	StrategyResourcesDir  ExampleSearchStrategy = "resources_dir"
+	StrategyNamedDir      ExampleSearchStrategy = "named_dir"
+	StrategyDirectTFFile  ExampleSearchStrategy = "direct_tf_file"
+	StrategyRecursiveScan ExampleSearchStrategy = "recursive_scan"
+)
+
+func NewExampleClient(cfg *config.Config) *ExampleClient {
+	providerMetadata, err := getProviderRegistryMeta(cfg.Provider.SourceMapping.RegistrySource)
+	if err != nil {
+		log.Printf("failed to get provider metadata: %v", err)
+		return nil
+	}
+
+	return &ExampleClient{
+		config:           cfg,
+		client:           newGithubClient(),
+		providerMetadata: providerMetadata,
+	}
+}
 
 func newGithubClient() *github.Client {
 	ctx := context.Background()
@@ -54,52 +80,98 @@ func newGithubClient() *github.Client {
 	return client
 }
 
-func getProviderRepo(registrySource string) (string, error) {
+func getProviderRegistryMeta(registrySource string) (ProviderMetadata, error) {
 	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s", registrySource)
-	resp, err := http.Get(url)
+
+	meta, err := util.GetJson[ProviderMetadata](url)
 	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("failed to fetch provider metadata: %s", resp.Status)
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
-		return "", err
+		return ProviderMetadata{}, fmt.Errorf("error getting provider repo: %w", err)
 	}
 
 	if meta.Source == "" {
-		return "", fmt.Errorf("repository URL not found for provider %s", strings.Split(registrySource, "/")[:1])
+		return ProviderMetadata{}, fmt.Errorf("repository URL not found for provider %s", strings.Split(registrySource, "/")[1])
 	}
 
-	return meta.Source, nil
+	return meta, nil
 }
 
-func findGithubExamples(repoUrl, version, resourceType string) (*[]ExampleResult, error) {
-	owner, repo, err := parseGithubURL(repoUrl)
+func (c *ExampleClient) findGithubExamples(version, resourceType string) (*[]ExampleResult, error) {
+	var strategy ExampleSearchStrategy
+	if c.config.WorkingStrategy == "" {
+		log.Println("(findGithubExamples) no config strategy found; using fallback strategy")
+		strategy = StrategyNone
+	} else {
+		strategy = ExampleSearchStrategy(c.config.WorkingStrategy)
+	}
+
+	owner, repo, err := parseGithubURL(c.providerMetadata.Source)
 	if err != nil {
 		return nil, err
 	}
 
-	client := newGithubClient()
-
+	var opts *github.RepositoryContentGetOptions
 	if version != "" {
 		opts = &github.RepositoryContentGetOptions{Ref: version}
 	}
 
-	_, contents, _, err := client.Repositories.GetContents(
-		context.Background(), owner, repo, "examples", opts,
-	)
+	_, contents, _, err := c.client.Repositories.GetContents(context.Background(), owner, repo, "examples", opts)
 	if err != nil {
 		return nil, fmt.Errorf("no examples directory: %w", err)
 	}
 
-	for _, c := range contents {
-		if c.GetType() == "dir" && strings.EqualFold(c.GetName(), "resources") {
-			_, innerContents, _, err := client.Repositories.GetContents(
-				context.Background(), owner, repo, c.GetPath(), opts,
+	if strategy != StrategyNone {
+		examples, err := c.tryStrategy(strategy, contents, owner, repo, resourceType, opts)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find examples for %s: %w", resourceType, err)
+		}
+		return examples, nil
+	}
+
+	strategiesToTry := []ExampleSearchStrategy{
+		StrategyResourcesDir,
+		StrategyNamedDir,
+		StrategyDirectTFFile,
+		StrategyRecursiveScan,
+	}
+
+	for _, s := range strategiesToTry {
+		examples, err := c.tryStrategy(s, contents, owner, repo, resourceType, opts)
+		if err != nil {
+			log.Printf("%s failed with: %v", s, err)
+			continue
+		}
+
+		c.config.WorkingStrategy = string(s)
+		if err := c.config.WriteConfig(); err != nil {
+			log.Printf("github.go: %v", err)
+		}
+
+		return examples, nil
+	}
+
+	return nil, fmt.Errorf("no example found for resource %s", resourceType)
+}
+
+func (c *ExampleClient) tryStrategy(strategy ExampleSearchStrategy, contents []*github.RepositoryContent, owner, repo, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	switch strategy {
+	case StrategyResourcesDir:
+		return c.findInResourcesDir(contents, owner, repo, resourceType, opts)
+	case StrategyNamedDir:
+		return c.findInNamedDir(contents, owner, repo, resourceType, opts)
+	case StrategyDirectTFFile:
+		return c.findTFFileInRoot(contents, owner, repo, resourceType, opts)
+	case StrategyRecursiveScan:
+		return c.recursiveSearch(contents, owner, repo, resourceType, opts)
+	}
+
+	return nil, fmt.Errorf("unknown strategy %s", strategy)
+}
+
+func (c *ExampleClient) findInResourcesDir(contents []*github.RepositoryContent, owner, repo, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	for _, content := range contents {
+		if content.GetType() == "dir" && strings.EqualFold(content.GetName(), "resources") {
+			_, innerContents, _, err := c.client.Repositories.GetContents(
+				context.Background(), owner, repo, content.GetPath(), opts,
 			)
 			if err != nil {
 				return nil, err
@@ -108,37 +180,59 @@ func findGithubExamples(repoUrl, version, resourceType string) (*[]ExampleResult
 			for _, ic := range innerContents {
 				if ic.GetType() == "dir" && strings.HasSuffix(strings.ToLower(ic.GetName()), resourceType) {
 					log.Println("Found example directory (resources):", ic.GetPath())
-					return searchExamplesDirectory(client, owner, repo, ic.GetPath(), resourceType)
+					return c.searchExamplesDirectory(owner, repo, ic.GetPath(), resourceType, opts)
 				}
 			}
 		}
 	}
+	return nil, fmt.Errorf("no example found for resource %s", resourceType)
+}
 
-	for _, c := range contents {
-		if c.GetType() == "dir" && strings.Contains(strings.ToLower(c.GetName()), resourceType) {
-
-			log.Println("Found example directory:", c.GetPath())
-			return searchExamplesDirectory(client, owner, repo, c.GetPath(), resourceType)
+func (c *ExampleClient) findInNamedDir(contents []*github.RepositoryContent, owner, repo, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	for _, content := range contents {
+		if content.GetType() == "dir" && strings.Contains(strings.ToLower(content.GetName()), resourceType) {
+			log.Println("Found example directory:", content.GetPath())
+			return c.searchExamplesDirectory(owner, repo, content.GetPath(), resourceType, opts)
 		}
 	}
+	return nil, fmt.Errorf("no example found for resource %s", resourceType)
+}
 
-	for _, c := range contents {
-		if c.GetType() == "file" && strings.HasSuffix(c.GetName(), ".tf") && strings.Contains(strings.ToLower(c.GetName()), resourceType) {
-			log.Println("Found example file:", c.GetPath())
-			return fetchAndValidate(client, owner, repo, c.GetPath(), resourceType)
+func (c *ExampleClient) findTFFileInRoot(contents []*github.RepositoryContent, owner, repo, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	for _, content := range contents {
+		if content.GetType() == "file" && strings.HasSuffix(content.GetName(), ".tf") {
+			log.Println("Found tf file:", content.GetPath())
+			return c.fetchAndValidate(owner, repo, content.GetPath(), resourceType, opts)
 		}
 	}
+	return nil, fmt.Errorf("no example found for resource %s", resourceType)
+}
 
-	for _, c := range contents {
-		if c.GetType() == "dir" {
-			ex, _ := searchExamplesDirectory(client, owner, repo, c.GetPath(), resourceType)
-			if ex != nil {
-				return ex, nil
+func (c *ExampleClient) recursiveSearch(contents []*github.RepositoryContent, owner, repo, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	var totalExamples []ExampleResult
+	var errors []error
+
+	for _, citem := range contents {
+		if citem.GetType() == "dir" {
+			examples, err := c.searchExamplesDirectory(owner, repo, citem.GetPath(), resourceType, opts)
+			if err != nil {
+				errors = append(errors, fmt.Errorf("[%s] %w", citem.GetPath(), err))
+				continue
+			}
+			if examples != nil {
+				totalExamples = append(totalExamples, *examples...)
 			}
 		}
 	}
 
-	return nil, fmt.Errorf("no example found for resource %s", resourceType)
+	if len(totalExamples) == 0 {
+		for _, e := range errors {
+			log.Printf("recursiveSearch error: %v", e)
+		}
+		return nil, fmt.Errorf("no examples found for resource %s", resourceType)
+	}
+
+	return &totalExamples, nil
 }
 
 func parseGithubURL(url string) (owner, repo string, err error) {
@@ -155,8 +249,8 @@ func parseGithubURL(url string) (owner, repo string, err error) {
 	return parts[0], parts[1], nil
 }
 
-func searchExamplesDirectory(client *github.Client, owner, repo, dirPath, resourceType string) (*[]ExampleResult, error) {
-	_, sub, _, err := client.Repositories.GetContents(context.Background(), owner, repo, dirPath, opts)
+func (c *ExampleClient) searchExamplesDirectory(owner, repo, dirPath, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	_, sub, _, err := c.client.Repositories.GetContents(context.Background(), owner, repo, dirPath, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +259,7 @@ func searchExamplesDirectory(client *github.Client, owner, repo, dirPath, resour
 	for _, f := range sub {
 		if f.GetType() == "file" && strings.HasSuffix(f.GetName(), ".tf") {
 			log.Println("Found tf file:", f.GetName())
-			examples, err := fetchAndValidate(client, owner, repo, f.GetPath(), resourceType)
+			examples, err := c.fetchAndValidate(owner, repo, f.GetPath(), resourceType, opts)
 			if err != nil {
 				log.Printf("[%s] %s", f.GetName(), err)
 				continue
@@ -182,8 +276,8 @@ func searchExamplesDirectory(client *github.Client, owner, repo, dirPath, resour
 	return &totalExamples, nil
 }
 
-func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType string) (*[]ExampleResult, error) {
-	file, _, _, err := client.Repositories.GetContents(context.Background(), owner, repo, filePath, opts)
+func (c *ExampleClient) fetchAndValidate(owner, repo, filePath, resourceType string, opts *github.RepositoryContentGetOptions) (*[]ExampleResult, error) {
+	file, _, _, err := c.client.Repositories.GetContents(context.Background(), owner, repo, filePath, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +287,7 @@ func fetchAndValidate(client *github.Client, owner, repo, filePath, resourceType
 		return nil, err
 	}
 
-	resourceType = meta.Name + "_" + resourceType
+	resourceType = c.providerMetadata.Name + "_" + resourceType
 	re := regexp.MustCompile(fmt.Sprintf(`resource\s+"%s"\s+"[^"]+"\s*{`, regexp.QuoteMeta(resourceType)))
 	matches := re.FindAllStringIndex(text, -1)
 

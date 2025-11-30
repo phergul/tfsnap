@@ -21,18 +21,20 @@ type Provider struct {
 }
 
 type Config struct {
+	ConfigPath        string   `yaml:"config_path"`
 	WorkingDirectory  string   `yaml:"working_directory"`
 	Provider          Provider `yaml:"provider"`
 	SnapshotDirectory string   `yaml:"snapshot_directory"`
+	WorkingStrategy   string   `yaml:"working_strategy"`
 }
 
-func (c *Config) WriteConfig(filePath string) error {
+func (c *Config) WriteConfig() error {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := os.WriteFile(c.ConfigPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/terrasnap/internal/util"
 )
 
 func InjectSkeleton(cfg *config.Config, schema *tfjson.Schema, resourceType string) error {
@@ -29,6 +29,7 @@ func buildSkeleton(schema *tfjson.Schema, resourceType string) (string, error) {
 	resource.WriteString(renderBlock(schema.Block, 1))
 	resource.WriteString("}\n")
 
+	// TODO: this error is never returned, maybe some check to see if the resource is valid?
 	return resource.String(), nil
 }
 
@@ -36,11 +37,7 @@ func renderBlock(block *tfjson.SchemaBlock, indent int) string {
 	var out strings.Builder
 	indentStr := strings.Repeat("\t", indent)
 
-	attrKeys := make([]string, 0, len(block.Attributes))
-	for k := range block.Attributes {
-		attrKeys = append(attrKeys, k)
-	}
-	sort.Strings(attrKeys)
+	attrKeys := util.SortedKeys(block.Attributes)
 
 	for _, key := range attrKeys {
 		attr := block.Attributes[key]
@@ -52,11 +49,7 @@ func renderBlock(block *tfjson.SchemaBlock, indent int) string {
 		}
 	}
 
-	nestedKeys := make([]string, 0, len(block.NestedBlocks))
-	for k := range block.NestedBlocks {
-		nestedKeys = append(nestedKeys, k)
-	}
-	sort.Strings(nestedKeys)
+	nestedKeys := util.SortedKeys(block.NestedBlocks)
 
 	for _, name := range nestedKeys {
 		nested := block.NestedBlocks[name]
@@ -91,11 +84,7 @@ func getEmptyValue(key string, v tfjson.SchemaAttribute, indent int) string {
 		out.WriteString(fmt.Sprintf("%s%s {\n", indentStr, key))
 
 		elemType := v.AttributeType.ElementType()
-		nestedKeys := make([]string, 0, len(elemType.AttributeTypes()))
-		for k := range elemType.AttributeTypes() {
-			nestedKeys = append(nestedKeys, k)
-		}
-		sort.Strings(nestedKeys)
+		nestedKeys := util.SortedKeys(elemType.AttributeTypes())
 
 		for _, nestedKey := range nestedKeys {
 			nestedType := elemType.AttributeTypes()[nestedKey]
@@ -114,4 +103,3 @@ func getEmptyValue(key string, v tfjson.SchemaAttribute, indent int) string {
 		return ""
 	}
 }
-

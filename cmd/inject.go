@@ -71,7 +71,12 @@ var InjectCmd = &cobra.Command{
 
 			schema, valid := inject.ValidateResource(schemas, schemaKey, fullProviderResourceName)
 			if !valid {
-				fmt.Printf("Resource '%s' is not valid for provider %s@%s\n", args[0], cfg.Provider.Name, version)
+				fmt.Printf("Resource '%s' is not valid for provider %s@", args[0], cfg.Provider.Name)
+				if version != "" {
+					fmt.Println(version)
+				} else {
+					fmt.Println("latest")
+				}
 				return
 			}
 			fmt.Printf("Valid resource [%s]. Injecting", resourceName)

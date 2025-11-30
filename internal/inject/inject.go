@@ -1,10 +1,8 @@
 package inject
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,16 +12,9 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/manifoldco/promptui"
 	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/terrasnap/internal/util"
 	"golang.org/x/mod/semver"
 )
-
-type TFResource struct {
-	Name     string `json:"name"`
-	Examples []struct {
-		Description string `json:"description"`
-		Code        string `json:"code"`
-	} `json:"examples"`
-}
 
 type ProviderVersion struct {
 	Version string `json:"version"`
@@ -48,7 +39,7 @@ func ValidateResource(schemas *tfjson.ProviderSchemas, registrySource, input str
 func InjectResource(cfg *config.Config, resourceType, version string) error {
 	tfPath := filepath.Join(cfg.WorkingDirectory, "main.tf")
 
-	resource, err := getResourceExample(cfg.Provider.SourceMapping.RegistrySource, resourceType, version)
+	resource, err := getResourceExample(cfg, resourceType, version)
 	if err != nil {
 		log.Println(err)
 		return fmt.Errorf("failed to inject resource. Check logs for details.")
@@ -78,10 +69,10 @@ func writeResourceToFile(path, resource string) error {
 	return err
 }
 
-func getResourceExample(registrySource, resourceType, version string) (string, error) {
-	versions, err := getAvailableProviderVersions(registrySource)
+func getResourceExample(cfg *config.Config, resourceType, version string) (string, error) {
+	versions, err := getAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
 	if err != nil {
-		log.Printf("failed to get provider versions for %s: %v", strings.Split(registrySource, "/")[:1], err)
+		log.Printf("failed to get provider versions for %s: %v", strings.Split(cfg.Provider.SourceMapping.RegistrySource, "/")[:1], err)
 		return "", err
 	}
 
@@ -95,14 +86,11 @@ func getResourceExample(registrySource, resourceType, version string) (string, e
 		providerVersion = version
 	}
 
-	providerRepoUrl, err := getProviderRepo(registrySource)
-	if err != nil {
-		return "", fmt.Errorf("failed to get provider repo: %w", err)
-	}
+	examplesClient := NewExampleClient(cfg)
 
-	examples, err := findGithubExamples(providerRepoUrl, providerVersion, resourceType)
+	examples, err := examplesClient.findGithubExamples(providerVersion, resourceType)
 	if err != nil {
-		return "", fmt.Errorf("failed to get examples from github repo (%s): %w", providerRepoUrl, err)
+		return "", fmt.Errorf("failed to get examples from github repo (%s): %w", examplesClient.providerMetadata.Source, err)
 	}
 
 	if len(*examples) > 1 {
@@ -135,19 +123,9 @@ func getResourceExample(registrySource, resourceType, version string) (string, e
 func getAvailableProviderVersions(registrySource string) ([]string, error) {
 	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s/versions", registrySource)
 
-	resp, err := http.Get(url)
+	versions, err := util.GetJson[VersionResponse](url)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to get provider versions: %s", resp.Status)
-	}
-
-	var versions VersionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&versions); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get provider versions: %s", err)
 	}
 
 	var versionList []string
