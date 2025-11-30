@@ -36,16 +36,23 @@ func ValidateResource(schemas *tfjson.ProviderSchemas, registrySource, input str
 	return schema, ok
 }
 
-func InjectResource(cfg *config.Config, resourceType, version string) error {
+func InjectResource(cfg *config.Config, resourceType, version string, dependency bool) error {
 	tfPath := filepath.Join(cfg.WorkingDirectory, "main.tf")
 
-	resource, err := getResourceExample(cfg, resourceType, version)
+	resources, err := getResourceExampleWithDependencies(cfg, resourceType, version, dependency)
 	if err != nil {
 		log.Println(err)
 		return fmt.Errorf("failed to inject resource. Check logs for details.")
 	}
 
-	return writeResourceToFile(tfPath, resource)
+	for _, resource := range resources {
+		if err := writeResourceToFile(tfPath, resource); err != nil {
+			log.Println(err)
+			return fmt.Errorf("failed to inject resource. Check logs for details.")
+		}
+	}
+
+	return nil
 }
 
 func writeResourceToFile(path, resource string) error {
@@ -69,11 +76,11 @@ func writeResourceToFile(path, resource string) error {
 	return err
 }
 
-func getResourceExample(cfg *config.Config, resourceType, version string) (string, error) {
+func getResourceExampleWithDependencies(cfg *config.Config, resourceType, version string, dependency bool) ([]string, error) {
 	versions, err := getAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
 	if err != nil {
 		log.Printf("failed to get provider versions for %s: %v", strings.Split(cfg.Provider.SourceMapping.RegistrySource, "/")[:1], err)
-		return "", err
+		return nil, err
 	}
 
 	var providerVersion string
@@ -81,7 +88,7 @@ func getResourceExample(cfg *config.Config, resourceType, version string) (strin
 		providerVersion = versions[0] //latest
 	} else {
 		if !slices.Contains(versions, version) {
-			return "", fmt.Errorf("provided version %s does not exist for provider", version)
+			return nil, fmt.Errorf("provided version %s does not exist for provider", version)
 		}
 		providerVersion = version
 	}
@@ -90,9 +97,10 @@ func getResourceExample(cfg *config.Config, resourceType, version string) (strin
 
 	examples, err := examplesClient.findGithubExamples(providerVersion, resourceType)
 	if err != nil {
-		return "", fmt.Errorf("failed to get examples from github repo (%s): %w", examplesClient.providerMetadata.Source, err)
+		return nil, fmt.Errorf("failed to get examples from github repo (%s): %w", examplesClient.providerMetadata.Source, err)
 	}
 
+	var initialResource string
 	if len(*examples) > 1 {
 		fmt.Printf("Multiple %s resources found\n", resourceType)
 		prompt := promptui.Select{
@@ -109,15 +117,35 @@ func getResourceExample(cfg *config.Config, resourceType, version string) (strin
 		index, _, err := prompt.Run()
 
 		if err != nil {
-			return "", fmt.Errorf("prompt failed: %w", err)
+			return nil, fmt.Errorf("prompt failed: %w", err)
 		}
 
-		return (*examples)[index].Content, nil
+		initialResource = (*examples)[index].Content
 	} else if len(*examples) == 1 {
-		return (*examples)[0].Content, nil
+		initialResource = (*examples)[0].Content
+	} else {
+		return nil, fmt.Errorf("no example found for resource %s", resourceType)
 	}
 
-	return "", fmt.Errorf("no example found for resource %s", resourceType)
+	if dependency {
+		log.Println("Checking dependencies for resource:", resourceType)
+		dependencies, err := examplesClient.checkDependencies(initialResource)
+		if err != nil {
+			fmt.Printf("failed to check dependencies; skipping...\n")
+			log.Printf("error checking dependencies: %v", err)
+			return []string{initialResource}, nil
+		}
+		if len(dependencies) > 0 {
+			fmt.Printf("Found %d dependencies. Resolving...\n", len(dependencies))
+			log.Printf("Found dependencies: %d", len(dependencies))
+			resolvedDependencies := examplesClient.resolveDependencies(dependencies)
+			return append([]string{initialResource}, resolvedDependencies...), nil
+		} else {
+			log.Println("No dependencies found")
+		}
+	}
+
+	return []string{initialResource}, nil
 }
 
 func getAvailableProviderVersions(registrySource string) ([]string, error) {

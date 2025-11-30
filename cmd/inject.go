@@ -97,12 +97,13 @@ var InjectCmd = &cobra.Command{
 				resourceName = after
 			}
 			fmt.Println("...")
-			if err = inject.InjectResource(cfg, resourceName, version); err != nil {
+			if err = inject.InjectResource(cfg, resourceName, version, dependency); err != nil {
 				fmt.Printf("Injection failed: %v\n", err)
 			}
 		}
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
+		fmt.Println("Done")
 		if err := os.RemoveAll(tempDir); err != nil {
 			log.Println("failed to delete temp dir")
 		}

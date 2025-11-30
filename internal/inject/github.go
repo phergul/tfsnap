@@ -15,22 +15,16 @@ import (
 )
 
 type ExampleClient struct {
-	config           *config.Config
-	client           *github.Client
-	providerMetadata ProviderMetadata
+	config               *config.Config
+	client               *github.Client
+	providerMetadata     ProviderMetadata
+	specificResourceName string
 }
 type ProviderMetadata struct {
-	ID        string `json:"id"`
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-	Source    string `json:"source"`
-}
-
-type GitHubContent struct {
-	Name        string `json:"name"`
-	Path        string `json:"path"`
-	DownloadURL string `json:"download_url"`
-	Type        string `json:"type"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Source  string `json:"source"`
+	Version string `json:"version"`
 }
 
 type ExampleResult struct {
@@ -107,6 +101,10 @@ func (c *ExampleClient) findGithubExamples(version, resourceType string) (*[]Exa
 	owner, repo, err := parseGithubURL(c.providerMetadata.Source)
 	if err != nil {
 		return nil, err
+	}
+
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
 	}
 
 	var opts *github.RepositoryContentGetOptions
@@ -270,6 +268,13 @@ func (c *ExampleClient) searchExamplesDirectory(owner, repo, dirPath, resourceTy
 		}
 	}
 
+	for _, ex := range totalExamples {
+		//dependency found
+		if ex.Name == c.specificResourceName {
+			return &[]ExampleResult{ex}, nil
+		}
+	}
+
 	if len(totalExamples) == 0 {
 		return nil, fmt.Errorf("no examples found for resource %s", resourceType)
 	}
@@ -287,7 +292,9 @@ func (c *ExampleClient) fetchAndValidate(owner, repo, filePath, resourceType str
 		return nil, err
 	}
 
-	resourceType = c.providerMetadata.Name + "_" + resourceType
+	if !strings.HasPrefix(resourceType, c.providerMetadata.Name+"_") {
+		resourceType = c.providerMetadata.Name + "_" + resourceType
+	}
 	re := regexp.MustCompile(fmt.Sprintf(`resource\s+"%s"\s+"[^"]+"\s*{`, regexp.QuoteMeta(resourceType)))
 	matches := re.FindAllStringIndex(text, -1)
 
@@ -328,7 +335,6 @@ func extractResourceBlocks(content string, indexes [][]int) ([]string, error) {
 
 		braceIndex := strings.Index(content[start:], "{")
 		if braceIndex == -1 {
-			// return "", fmt.Errorf("malformed resource block, missing '{'")
 			errors = append(errors, fmt.Errorf("malformed resource block, missing '{'"))
 			continue
 		}
@@ -352,7 +358,6 @@ func extractResourceBlocks(content string, indexes [][]int) ([]string, error) {
 		}
 
 		if depth != 0 {
-			// return "", fmt.Errorf("unterminated resource block")
 			errors = append(errors, fmt.Errorf("unterminated resource block"))
 			continue
 		}
