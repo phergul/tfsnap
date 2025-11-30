@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/util"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
 )
 
 const (

@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/phergul/terrasnap/cmd/snapshot"
+	"github.com/phergul/tfsnap/cmd/snapshot"
 	"github.com/spf13/cobra"
 )
 

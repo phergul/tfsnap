@@ -5,8 +5,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/snapshot"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 

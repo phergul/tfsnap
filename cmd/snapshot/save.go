@@ -5,9 +5,9 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/snapshot"
-	"github.com/phergul/terrasnap/internal/util"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/snapshot"
+	"github.com/phergul/tfsnap/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +18,7 @@ var (
 )
 
 var SaveCmd = &cobra.Command{
-	Use:   "save [snapshot-name]",
+	Use:   "save <snapshot-name>",
 	Short: "Save a new snapshot of your terraform configuration and binary",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

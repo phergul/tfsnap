@@ -3,13 +3,13 @@ package snapshot
 import (
 	"fmt"
 
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/snapshot"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
 var LoadCmd = &cobra.Command{
-	Use:   "load [snapshot-name]",
+	Use:   "load <snapshot-name>",
 	Short: "Load a previously saved snapshot",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

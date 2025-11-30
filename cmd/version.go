@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/tfsnap/internal/config"
 	"github.com/spf13/cobra"
 )
 
 var local bool
 
 var versionCmd = &cobra.Command{
-	Use:   "version",
+	Use:   "version <version>",
 	Short: "Change the version of the current terraform config",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

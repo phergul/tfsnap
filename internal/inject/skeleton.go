@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/util"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
 )
 
 func InjectSkeleton(cfg *config.Config, schema *tfjson.Schema, resourceType string) error {

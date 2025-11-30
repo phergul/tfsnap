@@ -5,13 +5,13 @@ import (
 	"log"
 	"strings"
 
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/snapshot"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
 var DeleteCmd = &cobra.Command{
-	Use:   "delete [snapshot-name]",
+	Use:   "delete <snapshot-name>",
 	Short: "Delete a saved snapshot",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {

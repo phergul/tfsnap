@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/phergul/terrasnap/cmd"
+	"github.com/phergul/tfsnap/cmd"
 )
 
 func main() {

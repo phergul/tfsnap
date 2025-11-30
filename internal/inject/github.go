@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/go-github/v79/github"
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/util"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
 	"golang.org/x/oauth2"
 )
 

@@ -11,8 +11,8 @@ import (
 
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/manifoldco/promptui"
-	"github.com/phergul/terrasnap/internal/config"
-	"github.com/phergul/terrasnap/internal/util"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
 	"golang.org/x/mod/semver"
 )
 

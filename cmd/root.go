@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/tfsnap/internal/config"
 	"github.com/spf13/cobra"
 )
 

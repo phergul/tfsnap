@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/phergul/terrasnap/internal/config"
+	"github.com/phergul/tfsnap/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +15,7 @@ var configFileFlag string
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize TerraSnap in the current directory",
+	Short: "Initialize tfsnap in the current directory",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		workingDir, err := os.Getwd()
 		if err != nil {
@@ -26,7 +26,7 @@ var initCmd = &cobra.Command{
 		configFile := filepath.Join(configDir, "config.yaml")
 
 		if _, err := os.Stat(configDir); !os.IsNotExist(err) {
-			return fmt.Errorf("TerraSnap is already initialized in this directory")
+			return fmt.Errorf("tfsnap is already initialized in this directory")
 		}
 
 		if err := os.Mkdir(configDir, 0755); err != nil {
@@ -75,13 +75,13 @@ var initCmd = &cobra.Command{
 			return err
 		}
 
-		fmt.Printf("Initialized TerraSnap in %s\n", workingDir)
+		fmt.Printf("Initialized tfsnap in %s\n", workingDir)
 		return nil
 	},
 }
 
 func init() {
-	initCmd.Flags().StringVarP(&configFileFlag, "config", "c", "", "Load TerraSnap config from YAML file")
+	initCmd.Flags().StringVarP(&configFileFlag, "config", "c", "", "Load tfsnap config from YAML file")
 }
 
 func buildProviderDir(dir string) string {
