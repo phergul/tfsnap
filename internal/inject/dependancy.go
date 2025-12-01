@@ -18,7 +18,7 @@ func (c *ExampleClient) checkDependencies(resource string) ([]string, error) {
 	return dependencies, nil
 }
 
-func (c *ExampleClient) resolveDependencies(dependencies []string) []string {
+func (c *ExampleClient) resolveDependencies(collectedDependencies *[]string, dependencies []string) {
 	var resolved []string
 	for _, dep := range dependencies {
 		parts := strings.SplitN(dep, ".", 2)
@@ -32,7 +32,7 @@ func (c *ExampleClient) resolveDependencies(dependencies []string) []string {
 		fmt.Printf("Resolved dependency %s\n", dep)
 		resolved = append(resolved, (*example)[0].Content)
 	}
-	return resolved
+	*collectedDependencies = append(*collectedDependencies, resolved...)
 }
 
 func extractDependencies(resource, providerPrefix string) ([]string, error) {

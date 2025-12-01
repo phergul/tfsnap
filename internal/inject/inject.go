@@ -114,20 +114,55 @@ func getResourceExampleWithDependencies(cfg *config.Config, resourceType, versio
 
 	if dependency {
 		log.Println("Checking dependencies for resource:", resourceType)
-		dependencies, err := examplesClient.checkDependencies(initialResource)
+		deps, err := examplesClient.checkDependencies(initialResource)
 		if err != nil {
 			fmt.Printf("failed to check dependencies; skipping...\n")
 			log.Printf("error checking dependencies: %v", err)
 			return []string{initialResource}, nil
 		}
-		if len(dependencies) > 0 {
-			fmt.Printf("Found %d dependencies. Resolving...\n", len(dependencies))
-			log.Printf("Found dependencies: %d", len(dependencies))
-			resolvedDependencies := examplesClient.resolveDependencies(dependencies)
-			return append([]string{initialResource}, resolvedDependencies...), nil
-		} else {
+
+		if len(deps) == 0 {
 			log.Println("No dependencies found")
+			return []string{initialResource}, nil
 		}
+
+		fmt.Printf("Found %d dependencies. Resolving...\n", len(deps))
+		log.Printf("Found dependencies: %d", len(deps))
+
+		resolvedResources := []string{}
+		visited := make(map[string]bool)
+		toProcess := deps
+
+		for len(toProcess) > 0 {
+			depName := toProcess[0]
+			toProcess = toProcess[1:]
+
+			if visited[depName] {
+				continue
+			}
+			visited[depName] = true
+
+			tempDeps := []string{depName}
+			examplesClient.resolveDependencies(&resolvedResources, tempDeps)
+
+			if len(resolvedResources) > 0 {
+				latestResource := resolvedResources[len(resolvedResources)-1]
+				nestedDeps, err := examplesClient.checkDependencies(latestResource)
+				if err != nil {
+					fmt.Printf("failed to check dependencies for %s; skipping...\n", depName)
+					log.Printf("error checking dependencies: %v", err)
+					continue
+				}
+
+				for _, nestedDep := range nestedDeps {
+					if !visited[nestedDep] {
+						toProcess = append(toProcess, nestedDep)
+					}
+				}
+			}
+		}
+
+		return append(resolvedResources, initialResource), nil
 	}
 
 	return []string{initialResource}, nil
