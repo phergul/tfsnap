@@ -25,7 +25,7 @@ func (c *ExampleClient) resolveDependencies(dependencies []string) []string {
 		c.specificResourceName = parts[1]
 		example, err := c.findGithubExamples(c.providerMetadata.Version, parts[0])
 		if err != nil {
-			fmt.Printf("Dependency %s could not be resolved. Skipping...", dep)
+			fmt.Printf("Dependency %s could not be resolved. Skipping...\n", dep)
 			log.Printf("error finding GitHub example for %s: %v", dep, err)
 			continue
 		}

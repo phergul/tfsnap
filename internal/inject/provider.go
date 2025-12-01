@@ -7,11 +7,86 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
+	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
+	"golang.org/x/mod/semver"
 )
 
-func CreateTempModule(name, source, dir, version string) error {
+const tempDir = "./tmp-module"
+
+type ProviderVersion struct {
+	Version string `json:"version"`
+}
+
+type VersionResponse struct {
+	Versions []ProviderVersion `json:"versions"`
+}
+
+func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bool) (*tfjson.ProviderSchema, error) {
+	version = strings.TrimPrefix(version, "v")
+
+	cacheKey := fmt.Sprintf("provider_schema_%s_%s", cfg.Provider.Name, version)
+	cache := util.GetCache[tfjson.ProviderSchema](cfg.WorkingDirectory, "provider_schema")
+	if !localProvider {
+		schema, err := cache.Get(cacheKey)
+		if err == nil {
+			return schema, nil
+		}
+		log.Println(err)
+	}
+
+	registrySource := cfg.Provider.SourceMapping.RegistrySource
+	if localProvider {
+		registrySource = cfg.Provider.SourceMapping.LocalSource
+	}
+
+	os.MkdirAll(tempDir, 0755)
+
+	err := createTempModule(cfg.Provider.Name, registrySource, tempDir, version)
+	if err != nil {
+		return nil, fmt.Errorf("Injection failed: error creating temp module: %v\n", err)
+	}
+
+	log.Println("Initialising temp module...")
+	errs := terraformInit(tempDir)
+	if errs != nil {
+		fmt.Println(errs[0])
+		log.Println(errs[1])
+		return nil, nil
+	}
+
+	log.Println("Loading provider schemas...")
+	schemas, err := loadProviderSchemas(tempDir)
+	if err != nil {
+		fmt.Println("Injection failed: error loading provider schemas")
+		log.Println(err)
+		return nil, nil
+	}
+
+	schemaKey := registrySource
+	if !localProvider {
+		schemaKey = "registry.terraform.io/" + registrySource
+	}
+
+	providerSchema, ok := schemas.Schemas[schemaKey]
+	if !ok {
+		return nil, fmt.Errorf("provider schema not found")
+	}
+
+	if !localProvider {
+		if err := cache.Set(cacheKey, *providerSchema); err != nil {
+			log.Printf("failed to cache provider schema: %v", err)
+		}
+	}
+
+	return providerSchema, nil
+}
+
+func createTempModule(name, source, dir, version string) error {
 	var temp string
 	if version != "" {
 		temp = fmt.Sprintf(`
@@ -42,7 +117,7 @@ terraform {
 	return nil
 }
 
-func TerraformInit(dir string) []error {
+func terraformInit(dir string) []error {
 	cmd := exec.Command("terraform", "init", "-no-color", "-input=false", "-backend=false")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
@@ -52,7 +127,7 @@ func TerraformInit(dir string) []error {
 	return nil
 }
 
-func LoadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
+func loadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
 	cmd := exec.Command("terraform", "providers", "schema", "-json")
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
@@ -65,4 +140,47 @@ func LoadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
 		return nil, fmt.Errorf("failed to unmarshal provider schemas: %v", err)
 	}
 	return &schemas, nil
+}
+
+func CleanupTempDir() error {
+	return os.RemoveAll(tempDir)
+}
+
+func GetLatestProviderVersion(cfg *config.Config) string {
+	versions, err := getAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
+	if err != nil {
+		log.Printf("failed to get available provider versions: %v", err)
+		return ""
+	}
+	if len(versions) == 0 {
+		log.Println("no available provider versions found")
+		return ""
+	}
+	return versions[0]
+}
+
+func getAvailableProviderVersions(registrySource string) ([]string, error) {
+	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s/versions", registrySource)
+
+	versions, err := util.GetJson[VersionResponse](url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get provider versions: %s", err)
+	}
+
+	var versionList []string
+	for _, v := range versions.Versions {
+		versionList = append(versionList, v.Version)
+	}
+
+	for i, v := range versionList {
+		if v[0] != 'v' {
+			versionList[i] = "v" + v
+		}
+	}
+
+	sort.Slice(versionList, func(i, j int) bool {
+		return semver.Compare(versionList[i], versionList[j]) > 0
+	})
+
+	return versionList, nil
 }

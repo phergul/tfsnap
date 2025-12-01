@@ -6,34 +6,19 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/manifoldco/promptui"
 	"github.com/phergul/tfsnap/internal/config"
-	"github.com/phergul/tfsnap/internal/util"
-	"golang.org/x/mod/semver"
 )
 
-type ProviderVersion struct {
-	Version string `json:"version"`
-}
-
-type VersionResponse struct {
-	Versions []ProviderVersion `json:"versions"`
-}
-
-func ValidateResource(schemas *tfjson.ProviderSchemas, registrySource, input string) (*tfjson.Schema, bool) {
-	log.Println("schemaKey is:", registrySource)
-
-	providerSchema, ok := schemas.Schemas[registrySource]
+func ValidateResource(schema *tfjson.ProviderSchema, input string) (*tfjson.Schema, bool) {
+	resourceSchema, ok := schema.ResourceSchemas[input]
 	if !ok {
-		return nil, false
+		return nil, ok
 	}
-
-	schema, ok := providerSchema.ResourceSchemas[input]
-	return schema, ok
+	return resourceSchema, ok
 }
 
 func InjectResource(cfg *config.Config, resourceType, version string, dependency bool) error {
@@ -146,30 +131,4 @@ func getResourceExampleWithDependencies(cfg *config.Config, resourceType, versio
 	}
 
 	return []string{initialResource}, nil
-}
-
-func getAvailableProviderVersions(registrySource string) ([]string, error) {
-	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s/versions", registrySource)
-
-	versions, err := util.GetJson[VersionResponse](url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get provider versions: %s", err)
-	}
-
-	var versionList []string
-	for _, v := range versions.Versions {
-		versionList = append(versionList, v.Version)
-	}
-
-	for i, v := range versionList {
-		if v[0] != 'v' {
-			versionList[i] = "v" + v
-		}
-	}
-
-	sort.Slice(versionList, func(i, j int) bool {
-		return semver.Compare(versionList[i], versionList[j]) > 0
-	})
-
-	return versionList, nil
 }

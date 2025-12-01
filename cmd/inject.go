@@ -3,15 +3,12 @@ package cmd
 import (
 	"fmt"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/inject"
 	"github.com/spf13/cobra"
 )
-
-const tempDir = "./tmp-module"
 
 var version string
 var skeleton bool
@@ -29,38 +26,15 @@ var InjectCmd = &cobra.Command{
 			return
 		}
 
-		os.MkdirAll(tempDir, 0755)
-
-		registrySource := cfg.Provider.SourceMapping.RegistrySource
-		if localProvider {
-			registrySource = cfg.Provider.SourceMapping.LocalSource
+		if !localProvider && version == "" {
+			version = inject.GetLatestProviderVersion(cfg)
 		}
+		log.Println("Using provider version:", version)
 
-		err := inject.CreateTempModule(cfg.Provider.Name, registrySource, tempDir, version)
+		schema, err := inject.RetrieveProviderSchema(cfg, version, localProvider)
 		if err != nil {
-			fmt.Printf("Injection failed: error creating temp module: %v\n", err)
+			fmt.Printf("Injection failed: error retrieving provider schema: %v\n", err)
 			return
-		}
-
-		log.Println("Initialising temp module...")
-		errs := inject.TerraformInit(tempDir)
-		if errs != nil {
-			fmt.Println(errs[0])
-			log.Println(errs[1])
-			return
-		}
-
-		log.Println("Loading provider schemas...")
-		schemas, err := inject.LoadProviderSchemas(tempDir)
-		if err != nil {
-			fmt.Println("Injection failed: error loading provider schemas")
-			log.Println(err)
-			return
-		}
-
-		schemaKey := registrySource
-		if !localProvider {
-			schemaKey = "registry.terraform.io/" + registrySource
 		}
 
 		for _, resourceName := range args {
@@ -69,7 +43,7 @@ var InjectCmd = &cobra.Command{
 				fullProviderResourceName = fmt.Sprintf("%s_%s", cfg.Provider.Name, resourceName)
 			}
 
-			schema, valid := inject.ValidateResource(schemas, schemaKey, fullProviderResourceName)
+			resourceSchema, valid := inject.ValidateResource(schema, fullProviderResourceName)
 			if !valid {
 				fmt.Printf("Resource '%s' is not valid for provider %s@", args[0], cfg.Provider.Name)
 				if version != "" {
@@ -86,8 +60,8 @@ var InjectCmd = &cobra.Command{
 			}
 
 			if skeleton {
-				fmt.Println("skeleton...")
-				if err = inject.InjectSkeleton(cfg, schema, fullProviderResourceName); err != nil {
+				fmt.Println(" skeleton...")
+				if err = inject.InjectSkeleton(cfg, resourceSchema, fullProviderResourceName); err != nil {
 					fmt.Printf("Injection failed: %v", err)
 				}
 				return
@@ -104,15 +78,15 @@ var InjectCmd = &cobra.Command{
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
 		fmt.Println("Done")
-		if err := os.RemoveAll(tempDir); err != nil {
+		if err := inject.CleanupTempDir(); err != nil {
 			log.Println("failed to delete temp dir")
 		}
 	},
 }
 
 func init() {
-	InjectCmd.Flags().StringVarP(&version, "version", "v", "", "Version of the resource to inject")
-	InjectCmd.Flags().BoolVarP(&skeleton, "skeleton", "s", false, "Inject a skeleton version of the resource")
-	InjectCmd.Flags().BoolVarP(&localProvider, "local", "l", false, "Use local binary (currently only used for skeleton")
-	InjectCmd.Flags().BoolVarP(&dependency, "dependencies", "d", false, "Whether to include dependent resources in the injection")
+	InjectCmd.Flags().StringVarP(&version, "version", "v", "", "Version of the resource")
+	InjectCmd.Flags().BoolVarP(&skeleton, "skeleton", "s", false, "Skeleton version of the resource")
+	InjectCmd.Flags().BoolVarP(&localProvider, "local", "l", false, "Use local binary (Only for skeleton)")
+	InjectCmd.Flags().BoolVarP(&dependency, "dependencies", "d", false, "Whether to include dependent resources")
 }
