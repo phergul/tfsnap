@@ -31,6 +31,16 @@ func InjectResource(cfg *config.Config, resourceType, version string, dependency
 	}
 
 	for _, resource := range resources {
+		existingContent, err := os.ReadFile(tfPath)
+		if err != nil && !os.IsNotExist(err) {
+			log.Println(err)
+			return fmt.Errorf("failed to read existing file. Check logs for details.")
+		}
+
+		if resourceAlreadyExists(string(existingContent), resource) {
+			log.Printf("Resource already exists in file, skipping duplicate injection")
+			continue
+		}
 		if err := writeResourceToFile(tfPath, resource); err != nil {
 			log.Println(err)
 			return fmt.Errorf("failed to inject resource. Check logs for details.")
@@ -38,6 +48,10 @@ func InjectResource(cfg *config.Config, resourceType, version string, dependency
 	}
 
 	return nil
+}
+
+func resourceAlreadyExists(existingContent, newResource string) bool {
+	return strings.Contains(existingContent, strings.TrimSpace(newResource))
 }
 
 func writeResourceToFile(path, resource string) error {
@@ -114,55 +128,18 @@ func getResourceExampleWithDependencies(cfg *config.Config, resourceType, versio
 
 	if dependency {
 		log.Println("Checking dependencies for resource:", resourceType)
-		deps, err := examplesClient.checkDependencies(initialResource)
-		if err != nil {
-			fmt.Printf("failed to check dependencies; skipping...\n")
-			log.Printf("error checking dependencies: %v", err)
-			return []string{initialResource}, nil
-		}
-
-		if len(deps) == 0 {
-			log.Println("No dependencies found")
-			return []string{initialResource}, nil
-		}
-
-		fmt.Printf("Found %d dependencies. Resolving...\n", len(deps))
-		log.Printf("Found dependencies: %d", len(deps))
-
-		resolvedResources := []string{}
 		visited := make(map[string]bool)
-		toProcess := deps
+		resolvedDeps := []resolvedDependency{}
 
-		for len(toProcess) > 0 {
-			depName := toProcess[0]
-			toProcess = toProcess[1:]
+		examplesClient.resolveDependenciesRecursive(initialResource, visited, &resolvedDeps)
 
-			if visited[depName] {
-				continue
-			}
-			visited[depName] = true
-
-			tempDeps := []string{depName}
-			examplesClient.resolveDependencies(&resolvedResources, tempDeps)
-
-			if len(resolvedResources) > 0 {
-				latestResource := resolvedResources[len(resolvedResources)-1]
-				nestedDeps, err := examplesClient.checkDependencies(latestResource)
-				if err != nil {
-					fmt.Printf("failed to check dependencies for %s; skipping...\n", depName)
-					log.Printf("error checking dependencies: %v", err)
-					continue
-				}
-
-				for _, nestedDep := range nestedDeps {
-					if !visited[nestedDep] {
-						toProcess = append(toProcess, nestedDep)
-					}
-				}
-			}
+		resources := make([]string, 0, len(resolvedDeps)+1)
+		for _, dep := range resolvedDeps {
+			resources = append(resources, dep.content)
 		}
+		resources = append(resources, initialResource)
 
-		return append(resolvedResources, initialResource), nil
+		return resources, nil
 	}
 
 	return []string{initialResource}, nil
