@@ -11,6 +11,7 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/manifoldco/promptui"
 	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
 )
 
 func ValidateResource(schema *tfjson.ProviderSchema, input string) (*tfjson.Schema, bool) {
@@ -76,7 +77,7 @@ func writeResourceToFile(path, resource string) error {
 }
 
 func getResourceExampleWithDependencies(cfg *config.Config, resourceType, version string, dependency bool) ([]string, error) {
-	versions, err := getAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
+	versions, err := util.GetAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
 	if err != nil {
 		log.Printf("failed to get provider versions for %s: %v", strings.Split(cfg.Provider.SourceMapping.RegistrySource, "/")[:1], err)
 		return nil, err

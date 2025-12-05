@@ -6,8 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strings"
 
 	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +26,7 @@ var versionCmd = &cobra.Command{
 			fmt.Println("configuration not found in context; run `tfsnap init` first")
 			return
 		}
+		version := args[0]
 
 		tfFile := filepath.Join(cfg.WorkingDirectory, "main.tf")
 		data, err := os.ReadFile(tfFile)
@@ -31,21 +35,55 @@ var versionCmd = &cobra.Command{
 			return
 		}
 
-		log.Println("Changing provider to version", args[0])
-		fileContent := string(data)
-		versionRe := regexp.MustCompile(`version\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+"`)
-		newContent := versionRe.ReplaceAllString(fileContent, fmt.Sprintf(`version = "%s"`, args[0]))
+		if !local {
+			if version == "latest" {
+				version = strings.TrimPrefix(util.GetLatestProviderVersion(cfg), "v")
+			} else {
+				versions, err := util.GetAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
+				if err != nil {
+					fmt.Println("failed to get available provider versions")
+					return
+				}
+				if !slices.ContainsFunc(versions, func(v string) bool {
+					return v == "v"+version
+				}) {
+					fmt.Println("specified version is not available")
+					return
+				}
+			}
+		}
 
-		sourceRe := regexp.MustCompile(`source\s*=\s*"[^"]+"`)
+		log.Println("Changing provider to version", version)
+		fileContent := string(data)
+		newContent := fileContent
+
+		newVersion := fmt.Sprintf(`version = "%s"`, version)
+
+		targetSource := cfg.Provider.SourceMapping.RegistrySource
 		if local {
 			if cfg.Provider.SourceMapping.LocalSource == "" {
 				fmt.Println("LocalSource must be set in tfsnap config to use local version")
 				return
 			}
-			newContent = sourceRe.ReplaceAllString(newContent, fmt.Sprintf(`source = "%s"`, cfg.Provider.SourceMapping.LocalSource))
-		} else {
-			newContent = sourceRe.ReplaceAllString(newContent, fmt.Sprintf(`source = "%s"`, cfg.Provider.SourceMapping.RegistrySource))
+			targetSource = cfg.Provider.SourceMapping.LocalSource
 		}
+		newSource := fmt.Sprintf(`source = "%s"`, targetSource)
+
+		versionRe := regexp.MustCompile(`version\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+"`)
+		if versionRe.MatchString(newContent) {
+			newContent = versionRe.ReplaceAllString(newContent, newVersion)
+		} else {
+			log.Println("No existing version constraint found, adding...")
+			newSource = fmt.Sprintf("%s\n\t\t\t%s", newSource, newVersion)
+		}
+
+		sourceRe := regexp.MustCompile(`source\s*=\s*"[^"]+"`)
+		if !sourceRe.MatchString(newContent) {
+			fmt.Println("No existing source found")
+			return
+		}
+
+		newContent = sourceRe.ReplaceAllString(newContent, newSource)
 
 		err = os.WriteFile(tfFile, []byte(newContent), 0644)
 		if err != nil {
@@ -53,7 +91,7 @@ var versionCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Println("Provider version updated to:", args[0])
+		fmt.Println("Provider version updated to:", version)
 	},
 }
 

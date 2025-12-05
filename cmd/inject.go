@@ -7,6 +7,7 @@ import (
 
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/inject"
+	"github.com/phergul/tfsnap/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +28,7 @@ var InjectCmd = &cobra.Command{
 		}
 
 		if !localProvider && version == "" {
-			version = inject.GetLatestProviderVersion(cfg)
+			version = util.GetLatestProviderVersion(cfg)
 		}
 		log.Println("Using provider version:", version)
 

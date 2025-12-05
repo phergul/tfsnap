@@ -7,24 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/util"
-	"golang.org/x/mod/semver"
 )
 
 const tempDir = "./tmp-module"
-
-type ProviderVersion struct {
-	Version string `json:"version"`
-}
-
-type VersionResponse struct {
-	Versions []ProviderVersion `json:"versions"`
-}
 
 func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bool) (*tfjson.ProviderSchema, error) {
 	version = strings.TrimPrefix(version, "v")
@@ -144,43 +134,4 @@ func loadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
 
 func CleanupTempDir() error {
 	return os.RemoveAll(tempDir)
-}
-
-func GetLatestProviderVersion(cfg *config.Config) string {
-	versions, err := getAvailableProviderVersions(cfg.Provider.SourceMapping.RegistrySource)
-	if err != nil {
-		log.Printf("failed to get available provider versions: %v", err)
-		return ""
-	}
-	if len(versions) == 0 {
-		log.Println("no available provider versions found")
-		return ""
-	}
-	return versions[0]
-}
-
-func getAvailableProviderVersions(registrySource string) ([]string, error) {
-	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s/versions", registrySource)
-
-	versions, err := util.GetJson[VersionResponse](url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get provider versions: %s", err)
-	}
-
-	var versionList []string
-	for _, v := range versions.Versions {
-		versionList = append(versionList, v.Version)
-	}
-
-	for i, v := range versionList {
-		if v[0] != 'v' {
-			versionList[i] = "v" + v
-		}
-	}
-
-	sort.Slice(versionList, func(i, j int) bool {
-		return semver.Compare(versionList[i], versionList[j]) > 0
-	})
-
-	return versionList, nil
 }

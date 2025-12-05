@@ -6,10 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/util"
 )
@@ -39,6 +37,8 @@ func BuildSnapshot(cfg *config.Config, name, description string, includeBinary, 
 				return nil, fmt.Errorf("failed to capture provider binary: %w", err)
 			}
 		}
+	} else if includeBinary && !provider.IsLocalBuild {
+		fmt.Println("Warning: Provider is not a local build; binary will not be included")
 	}
 
 	if includeGit {
@@ -201,100 +201,39 @@ func DeleteSnapshot(cfg *config.Config, name string) error {
 	return nil
 }
 
-func detectProvider(cfg *config.Config) (*ProviderInfo, error) {
-	module, diag := tfconfig.LoadModule(cfg.WorkingDirectory)
-	if diag != nil && diag.Err() != nil {
-		return nil, fmt.Errorf("failed to load terraform module: %w", diag.Err())
-	}
-
-	if len(module.RequiredProviders) == 0 {
-		return nil, fmt.Errorf("no providers found in %s", module.Path)
-	} else if len(module.RequiredProviders) > 1 {
-		return nil, fmt.Errorf("multiple providers detected, only one is supported")
-	}
-
-	var provider ProviderInfo
-	for name, req := range module.RequiredProviders {
-		detectedSource := req.Source
-		detectedVersion := ""
-		if len(req.VersionConstraints) > 0 {
-			detectedVersion = req.VersionConstraints[0]
-		}
-		normalizedSource, isLocal := normalizeProviderSource(detectedSource, cfg)
-
-		provider = ProviderInfo{
-			Name:             name,
-			DetectedSource:   detectedSource,
-			DetectedVersion:  detectedVersion,
-			NormalizedSource: normalizedSource,
-			IsLocalBuild:     isLocal,
-		}
-	}
-
-	return &provider, nil
-}
-
-func normalizeProviderSource(detectedSource string, cfg *config.Config) (string, bool) {
-	mapping := cfg.Provider.SourceMapping
-	if detectedSource == mapping.LocalSource {
-		return mapping.RegistrySource, true
-	}
-	if detectedSource == mapping.RegistrySource {
-		return mapping.RegistrySource, false
-	}
-
-	// fallback to pattern-based detection
-	if isLikelyLocalSource(detectedSource) {
-		normalized := extractNormalizedSource(detectedSource)
-		return normalized, true
-	}
-
-	return detectedSource, false
-}
-
-func isLikelyLocalSource(source string) bool {
-	if strings.Contains(source, ".com/") ||
-		strings.Contains(source, ".io/") ||
-		strings.Contains(source, ".net/") ||
-		strings.Contains(source, ".org/") {
-		return true
-	}
-	return false
-}
-
-func extractNormalizedSource(source string) string {
-	parts := strings.Split(source, "/")
-	if len(parts) >= 2 {
-		return strings.Join(parts[len(parts)-2:], "/")
-	}
-	return source
-}
-
-func getCurrentTime() string {
-	now := time.Now()
-
-	return now.Format("2006-01-02_15-04-05")
-}
-
-func CopyTerraformFiles(cfg *config.Config, metadata *Metadata) error {
-	return util.CopyTFFiles(cfg.WorkingDirectory, filepath.Join(cfg.SnapshotDirectory, metadata.Id, snapshotTFConfigFileDir), false)
-}
-
-func LoadSnapshot(cfg *config.Config, name string) (*Metadata, error) {
+func LoadSnapshot(cfg *config.Config, name string) error {
 	snapshotDir := filepath.Join(cfg.SnapshotDirectory, name)
-	metadataFile := filepath.Join(snapshotDir, snapshotConfigFile)
 
-	metadata, err := readMetadata(metadataFile)
+	err := loadTFFiles(filepath.Join(snapshotDir, snapshotTFConfigFileDir), cfg.WorkingDirectory)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load snapshot metadata: %w", err)
+		return fmt.Errorf("failed to load terraform files: %w", err)
 	}
 
-	err = loadTFFiles(filepath.Join(snapshotDir, snapshotTFConfigFileDir), cfg.WorkingDirectory)
+	return nil
+}
+
+func ReplaceWithEmptyConfig(cfg *config.Config) error {
+	err := os.Remove(".terraform.lock.hcl")
 	if err != nil {
-		return nil, fmt.Errorf("failed to load terraform files: %w", err)
+		log.Println("failed to remove .terraform.lock.hcl:", err)
 	}
 
-	return metadata, nil
+	emptyConfig := fmt.Sprintf(`terraform {
+  required_providers {
+    %s = {
+      source = "%s"
+    }
+  }
+}
+
+`, cfg.Provider.Name, cfg.Provider.SourceMapping.RegistrySource)
+
+	err = os.WriteFile("main.tf", []byte(emptyConfig), 0644)
+	if err != nil {
+		log.Println("failed to write main.tf:", err)
+		fmt.Println("failed to empty main.tf")
+	}
+	return nil
 }
 
 func readMetadata(filePath string) (*Metadata, error) {
@@ -311,66 +250,10 @@ func readMetadata(filePath string) (*Metadata, error) {
 	return &metadata, nil
 }
 
+func CopyTerraformFiles(cfg *config.Config, metadata *Metadata) error {
+	return util.CopyTFFiles(cfg.WorkingDirectory, filepath.Join(cfg.SnapshotDirectory, metadata.Id, snapshotTFConfigFileDir), false)
+}
+
 func loadTFFiles(snapshotTerraformDir, destDir string) error {
 	return util.CopyTFFiles(snapshotTerraformDir, destDir, true)
-}
-
-func findProviderBinary(cfg *config.Config) (string, error) {
-	if cfg.Provider.ProviderDirectory == "" {
-		return "", fmt.Errorf("provider directory not configured")
-	}
-
-	possiblePaths := []string{
-		filepath.Join(cfg.Provider.ProviderDirectory, "terraform-provider-"+cfg.Provider.Name),
-		filepath.Join(cfg.Provider.ProviderDirectory, "bin", "terraform-provider-"+cfg.Provider.Name),
-		filepath.Join(cfg.Provider.ProviderDirectory, "dist", "terraform-provider-"+cfg.Provider.Name),
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			return path, nil
-		}
-	}
-
-	return "", fmt.Errorf("provider binary not found in %s", cfg.Provider.ProviderDirectory)
-}
-
-func captureProviderBinary(cfg *config.Config, binaryPath, snapshotName string, provider *ProviderInfo) error {
-	providerDir := filepath.Join(cfg.SnapshotDirectory, snapshotName, "provider")
-	if err := os.MkdirAll(providerDir, 0755); err != nil {
-		return fmt.Errorf("failed to create provider directory: %w", err)
-	}
-
-	hash, err := util.HashFile(binaryPath)
-	if err != nil {
-		return fmt.Errorf("failed to hash binary: %w", err)
-	}
-
-	info, err := os.Stat(binaryPath)
-	if err != nil {
-		return fmt.Errorf("failed to stat binary: %w", err)
-	}
-
-	binaryName := filepath.Base(binaryPath)
-	destPath := filepath.Join(providerDir, binaryName)
-
-	if err := util.CopyFile(binaryPath, destPath); err != nil {
-		return fmt.Errorf("failed to copy binary: %w", err)
-	}
-
-	if err := os.Chmod(destPath, 0755); err != nil {
-		return fmt.Errorf("failed to make binary executable: %w", err)
-	}
-
-	provider.Binary = &Binary{
-		OriginalPath:       binaryPath,
-		SnapshotBinaryPath: filepath.Join("provider", binaryName),
-		Hash:               hash,
-		Size:               info.Size(),
-	}
-
-	log.Printf("Provider binary captured (hash: %s, size: %.2f MB)\n",
-		hash[:8], float64(info.Size())/1024/1024)
-
-	return nil
 }

@@ -20,12 +20,11 @@ var LoadCmd = &cobra.Command{
 		}
 
 		fmt.Println("Loading snapshot:", args[0])
-		metadata, err := snapshot.LoadSnapshot(cfg, args[0])
+		err := snapshot.LoadSnapshot(cfg, args[0])
 		if err != nil {
 			fmt.Println("Error loading snapshot:", err)
 			return
 		}
 		fmt.Println("Snapshot loaded successfully:", args[0])
-		fmt.Printf("Snapshot metadata: %+v\n", metadata)
 	},
 }

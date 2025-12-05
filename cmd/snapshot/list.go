@@ -7,6 +7,7 @@ import (
 
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/snapshot"
+	"github.com/phergul/tfsnap/internal/util"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +36,6 @@ var ListCmd = &cobra.Command{
 		log.Println("Snapshots loaded successfully:")
 		for _, metadata := range metadataSlice {
 			fmt.Println(printSnapshotDetails(*metadata))
-			fmt.Println("------------------------------------")
 		}
 	},
 }
@@ -49,19 +49,27 @@ func printSnapshotDetails(snapshot snapshot.Metadata) string {
 		details.WriteString(fmt.Sprintf("Description: %s\n", snapshot.Description))
 	}
 	if snapshot.Provider != nil {
-		details.WriteString(fmt.Sprintf("Provider: %s@%s\n", snapshot.Provider.Name, snapshot.Provider.DetectedVersion))
-		if snapshot.Provider.IsLocalBuild {
-			details.WriteString("Local Build: true\n")
+		details.WriteString(fmt.Sprintf("Provider: %s@", snapshot.Provider.Name))
+		version := "latest"
+		if snapshot.Provider.DetectedVersion != "" {
+			version = snapshot.Provider.DetectedVersion
 		}
+		if snapshot.Provider.IsLocalBuild {
+			version = "local"
+		}
+		details.WriteString(fmt.Sprintf("%s\n", version))
 	}
 
 	if detailed {
 		details.WriteString(fmt.Sprintf("\nTotal number of resources: %d\n", snapshot.ConfigAnalysis.TotalCount))
 		details.WriteString("Resources by type:\n")
-		for resourceName, resource := range snapshot.ConfigAnalysis.Resources {
+		resourceKeys := util.SortedKeys(snapshot.ConfigAnalysis.Resources)
+		for _, resourceName := range resourceKeys {
+			resource := snapshot.ConfigAnalysis.Resources[resourceName]
 			details.WriteString(fmt.Sprintf("  [%s]: %d\n", resourceName, resource.Count))
 		}
 	}
+	fmt.Println("------------------------------------")
 	return details.String()
 }
 

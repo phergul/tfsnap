@@ -45,6 +45,5 @@ type ConfigAnalysis struct {
 }
 
 type Resource struct {
-	Type  string `json:"type,omitempty"`
-	Count int    `json:"count,omitempty"`
+	Count int `json:"count,omitempty"`
 }

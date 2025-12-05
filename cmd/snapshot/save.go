@@ -15,6 +15,7 @@ var (
 	description   string
 	includeBinary bool
 	includeGit    bool
+	persist       bool
 )
 
 var SaveCmd = &cobra.Command{
@@ -54,7 +55,14 @@ var SaveCmd = &cobra.Command{
 		}
 
 		fmt.Printf("\nSuccessfully saved snapshot: %s\n", args[0])
-		fmt.Printf("Summary: %s@%s\n", metadata.Provider.Name, metadata.Provider.DetectedVersion)
+		versionInfo := "latest"
+		if metadata.Provider.DetectedVersion != "" {
+			versionInfo = metadata.Provider.DetectedVersion
+		}
+		if metadata.Provider.IsLocalBuild {
+			versionInfo = "local"
+		}
+		fmt.Printf("Summary: %s@%s\n", metadata.Provider.Name, versionInfo)
 		if metadata.Provider.Binary != nil {
 			fmt.Printf("Provider binary: %.2f MB (hash: %s)\n",
 				float64(metadata.Provider.Binary.Size)/1024/1024,
@@ -66,11 +74,19 @@ var SaveCmd = &cobra.Command{
 				fmt.Printf("Warning: Uncommitted changes detected\n")
 			}
 		}
+
+		if persist {
+			return
+		}
+		if err := snapshot.ReplaceWithEmptyConfig(cfg); err != nil {
+			fmt.Printf("Failed to replace terraform files with empty config: %v\n", err)
+		}
 	},
 }
 
 func init() {
 	SaveCmd.Flags().StringVarP(&description, "description", "d", "", "Description of this snapshot")
-	SaveCmd.Flags().BoolVarP(&includeBinary, "include-binary", "b", false, "Whether to include the binary of the provider (local)")
-	SaveCmd.Flags().BoolVarP(&includeGit, "include-git", "g", false, "Whether to include info on the providers git branch")
+	SaveCmd.Flags().BoolVarP(&includeBinary, "include-binary", "b", false, "Whether to include the binary of the provider")
+	SaveCmd.Flags().BoolVarP(&includeGit, "include-git", "g", false, "Whether to include provider repo git info")
+	SaveCmd.Flags().BoolVarP(&persist, "persist", "p", false, "Whether to persist the saved config")
 }

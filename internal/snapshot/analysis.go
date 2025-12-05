@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 )
@@ -21,13 +20,10 @@ func AnalyseTFConfig(config string) (*ConfigAnalysis, error) {
 	for _, resource := range module.ManagedResources {
 		r, exists := analysis.Resources[resource.Type]
 		if !exists {
-			log.Println("New resource for:", resource.Type)
 			r = Resource{
-				Type:  resource.Type,
 				Count: 0,
 			}
 		}
-		log.Printf("[%s] incrementing count\n", resource.Type)
 		r.Count++
 		analysis.Resources[resource.Type] = r
 	}
