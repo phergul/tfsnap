@@ -15,6 +15,8 @@ import (
 	"github.com/phergul/tfsnap/internal/util"
 )
 
+const DefaultClient = "registry"
+
 func ValidateResource(schema *tfjson.ProviderSchema, input string) (*tfjson.Schema, bool) {
 	resourceSchema, ok := schema.ResourceSchemas[input]
 	if !ok {
@@ -96,7 +98,7 @@ func getResourceExampleWithDependencies(cfg *config.Config, resourceType, versio
 
 	clientType := cfg.ExampleClientType
 	if clientType == "" {
-		clientType = "github"
+		clientType = DefaultClient
 	}
 
 	examplesClient, err := client.New(clientType, cfg)
