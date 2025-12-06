@@ -17,6 +17,14 @@ type VersionResponse struct {
 	Versions []ProviderVersion `json:"versions"`
 }
 
+type ProviderMetadata struct {
+	ID        string `json:"id"`
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Source    string `json:"source"`
+	Version   string `json:"version"`
+}
+
 func GetAvailableProviderVersions(registrySource string) ([]string, error) {
 	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s/versions", registrySource)
 
@@ -54,4 +62,15 @@ func GetLatestProviderVersion(cfg *config.Config) string {
 		return ""
 	}
 	return versions[0]
+}
+
+func GetProviderRegistryMeta(registrySource string) (ProviderMetadata, error) {
+	url := fmt.Sprintf("https://registry.terraform.io/v1/providers/%s", registrySource)
+
+	meta, err := GetJson[ProviderMetadata](url)
+	if err != nil {
+		return ProviderMetadata{}, fmt.Errorf("error getting provider repo: %w", err)
+	}
+
+	return meta, nil
 }

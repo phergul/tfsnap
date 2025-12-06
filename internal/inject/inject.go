@@ -11,6 +11,7 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 	"github.com/manifoldco/promptui"
 	"github.com/phergul/tfsnap/internal/config"
+	"github.com/phergul/tfsnap/internal/inject/client"
 	"github.com/phergul/tfsnap/internal/util"
 )
 
@@ -93,19 +94,27 @@ func getResourceExampleWithDependencies(cfg *config.Config, resourceType, versio
 		providerVersion = version
 	}
 
-	examplesClient := NewExampleClient(cfg)
+	clientType := cfg.ExampleClientType
+	if clientType == "" {
+		clientType = "github"
+	}
 
-	examples, err := examplesClient.findGithubExamples(providerVersion, resourceType)
+	examplesClient, err := client.New(clientType, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get examples from github repo (%s): %w", examplesClient.providerMetadata.Source, err)
+		return nil, fmt.Errorf("failed to create examples client: %w", err)
+	}
+
+	examples, err := examplesClient.GetExamples(providerVersion, resourceType)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get examples: %w", err)
 	}
 
 	var initialResource string
-	if len(*examples) > 1 {
+	if len(examples) > 1 {
 		fmt.Printf("Multiple %s resources found\n", resourceType)
 		prompt := promptui.Select{
 			Label: fmt.Sprintf("Select %s example to inject", resourceType),
-			Items: *examples,
+			Items: examples,
 			Templates: &promptui.SelectTemplates{
 				Label:    "{{ . }}:",
 				Active:   "> {{ .Name | underline }}",
@@ -120,19 +129,21 @@ func getResourceExampleWithDependencies(cfg *config.Config, resourceType, versio
 			return nil, fmt.Errorf("prompt failed: %w", err)
 		}
 
-		initialResource = (*examples)[index].Content
-	} else if len(*examples) == 1 {
-		initialResource = (*examples)[0].Content
+		initialResource = examples[index].Content
+	} else if len(examples) == 1 {
+		initialResource = examples[0].Content
 	} else {
 		return nil, fmt.Errorf("no example found for resource %s", resourceType)
 	}
 
 	if dependency {
+		resolver := NewDependencyResolver(examplesClient)
+
 		log.Println("Checking dependencies for resource:", resourceType)
 		visited := make(map[string]bool)
 		resolvedDeps := []resolvedDependency{}
 
-		examplesClient.resolveDependenciesRecursive(initialResource, visited, &resolvedDeps)
+		resolver.resolveDependenciesRecursive(initialResource, visited, &resolvedDeps)
 
 		resources := make([]string, 0, len(resolvedDeps)+1)
 		for _, dep := range resolvedDeps {

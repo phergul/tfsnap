@@ -26,6 +26,7 @@ type Config struct {
 	Provider          Provider `yaml:"provider"`
 	SnapshotDirectory string   `yaml:"snapshot_directory"`
 	WorkingStrategy   string   `yaml:"working_strategy"`
+	ExampleClientType string   `yaml:"example_client_type"`
 }
 
 func (c *Config) WriteConfig() error {

@@ -7,15 +7,26 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
+	"github.com/phergul/tfsnap/internal/inject/client"
 )
+
+type DependencyResolver struct {
+	client client.ExampleClient
+}
+
+func NewDependencyResolver(c client.ExampleClient) *DependencyResolver {
+	return &DependencyResolver{
+		client: c,
+	}
+}
 
 type resolvedDependency struct {
 	name    string
 	content string
 }
 
-func (c *ExampleClient) checkDependencies(resource string) ([]string, error) {
-	dependencies, err := extractDependencies(resource, c.providerMetadata.Name)
+func (r *DependencyResolver) checkDependencies(resource string) ([]string, error) {
+	dependencies, err := extractDependencies(resource, r.client.GetProviderMetadata().Name)
 	if err != nil {
 		return nil, fmt.Errorf("error extracting resource attribute keys: %w", err)
 	}
@@ -23,8 +34,8 @@ func (c *ExampleClient) checkDependencies(resource string) ([]string, error) {
 	return dependencies, nil
 }
 
-func (c *ExampleClient) resolveDependenciesRecursive(resource string, visited map[string]bool, resolvedResources *[]resolvedDependency) {
-	deps, err := c.checkDependencies(resource)
+func (r *DependencyResolver) resolveDependenciesRecursive(resource string, visited map[string]bool, resolvedResources *[]resolvedDependency) {
+	deps, err := r.checkDependencies(resource)
 	if err != nil {
 		fmt.Printf("failed to check dependencies; skipping...\n")
 		log.Printf("error checking dependencies: %v", err)
@@ -42,25 +53,25 @@ func (c *ExampleClient) resolveDependenciesRecursive(resource string, visited ma
 	trueResolveCount := len(deps)
 	for _, depName := range deps {
 		if visited[depName] {
-			log.Printf("Dependency %s already resolved, skipping...\n", depName)
+			fmt.Printf("Dependency %s already resolved, skipping...\n", depName)
 			trueResolveCount--
 			continue
 		}
 		visited[depName] = true
 
 		parts := strings.SplitN(depName, ".", 2)
-		c.specificResourceName = parts[1]
-		example, err := c.findGithubExamples(c.providerMetadata.Version, parts[0])
+		r.client.SetSpecificResourceName(parts[1])
+		example, err := r.client.GetExamples(r.client.GetProviderMetadata().Version, parts[0])
 		if err != nil {
 			fmt.Printf("Dependency %s could not be resolved. Skipping...\n", depName)
-			log.Printf("error finding GitHub example for %s: %v", depName, err)
+			log.Printf("error finding example for dependency %s: %v", depName, err)
 			continue
 		}
 
-		resourceContent := (*example)[0].Content
+		resourceContent := example[0].Content
 		fmt.Printf("Resolved dependency %s\n", depName)
 
-		c.resolveDependenciesRecursive(resourceContent, visited, resolvedResources)
+		r.resolveDependenciesRecursive(resourceContent, visited, resolvedResources)
 
 		*resolvedResources = append(*resolvedResources, resolvedDependency{
 			name:    depName,
@@ -97,12 +108,12 @@ func walkExpr(expr hclsyntax.Expression, providerPrefix string, deps *[]string) 
 	switch e := expr.(type) {
 	case *hclsyntax.ScopeTraversalExpr:
 		ref := traversalToString(e.Traversal)
-		if strings.HasPrefix(ref, providerPrefix) {
+		if ref != "" && strings.HasPrefix(ref, providerPrefix) {
 			*deps = append(*deps, ref)
 		}
 	case *hclsyntax.RelativeTraversalExpr:
 		ref := traversalToString(e.Traversal)
-		if strings.HasPrefix(ref, providerPrefix) {
+		if ref != "" && strings.HasPrefix(ref, providerPrefix) {
 			*deps = append(*deps, ref)
 		}
 	case *hclsyntax.TupleConsExpr:
@@ -137,7 +148,7 @@ func traversalToString(t hcl.Traversal) string {
 			log.Printf("traversing root: %s", s.Name)
 			// TODO: include data source resolution
 			if s.Name == "data" {
-				continue
+				return ""
 			}
 			parts = append(parts, s.Name)
 		case hcl.TraverseAttr:
