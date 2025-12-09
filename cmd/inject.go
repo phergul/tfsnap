@@ -78,7 +78,6 @@ var InjectCmd = &cobra.Command{
 		}
 	},
 	PostRun: func(cmd *cobra.Command, args []string) {
-		fmt.Println("Done")
 		if err := inject.CleanupTempDir(); err != nil {
 			log.Println("failed to delete temp dir")
 		}

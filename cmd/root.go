@@ -25,7 +25,7 @@ var rootCmd = &cobra.Command{
 		}
 		file, err := os.OpenFile(filepath.Join(wd, ".tfsnap/tfsnap.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			return fmt.Errorf("failed to create log file: %w", err)
+			return fmt.Errorf("no .tfsnap directory found in current working directory; run `tfsnap init` first")
 		}
 		log.SetOutput(file)
 		log.SetFlags(log.Ldate | log.Ltime)
@@ -61,6 +61,6 @@ func init() {
 
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatalln(err)
+		os.Exit(1)
 	}
 }
