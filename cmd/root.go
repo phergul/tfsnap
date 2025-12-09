@@ -39,7 +39,7 @@ var rootCmd = &cobra.Command{
 			fullCmd = strings.ToUpper(currParent.Name()) + " " + fullCmd
 			currParent = currParent.Parent()
 		}
-		log.Printf("[%s] Start", fullCmd)
+		log.Printf("[%s] Start - args: {%s}", fullCmd, strings.Join(args, ", "))
 
 		cfg, err := config.LoadConfig("")
 		if err != nil {
@@ -56,7 +56,7 @@ func init() {
 	rootCmd.AddCommand(snapshotCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(completionCmd)
-	rootCmd.AddCommand(InjectCmd)
+	rootCmd.AddCommand(injectCmd)
 }
 
 func Execute() {

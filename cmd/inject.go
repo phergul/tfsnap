@@ -16,7 +16,7 @@ var skeleton bool
 var localProvider bool
 var dependency bool
 
-var InjectCmd = &cobra.Command{
+var injectCmd = &cobra.Command{
 	Use:   "inject <resource1>, <resource2>...",
 	Short: "Manage resources example injections",
 	Args:  cobra.MinimumNArgs(1),
@@ -85,8 +85,8 @@ var InjectCmd = &cobra.Command{
 }
 
 func init() {
-	InjectCmd.Flags().StringVarP(&version, "version", "v", "", "Version of the resource")
-	InjectCmd.Flags().BoolVarP(&skeleton, "skeleton", "s", false, "Skeleton version of the resource")
-	InjectCmd.Flags().BoolVarP(&localProvider, "local", "l", false, "Use local binary (Only for skeleton)")
-	InjectCmd.Flags().BoolVarP(&dependency, "dependencies", "d", false, "Whether to include dependent resources")
+	injectCmd.Flags().StringVarP(&version, "version", "v", "", "Version of the resource")
+	injectCmd.Flags().BoolVarP(&skeleton, "skeleton", "s", false, "Skeleton version of the resource")
+	injectCmd.Flags().BoolVarP(&localProvider, "local", "l", false, "Use local binary (Only for skeleton)")
+	injectCmd.Flags().BoolVarP(&dependency, "dependencies", "d", false, "Whether to include dependent resources")
 }

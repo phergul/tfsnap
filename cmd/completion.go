@@ -9,6 +9,7 @@ import (
 var completionCmd = &cobra.Command{
 	Use:   "completion [bash|zsh|]",
 	Short: "Generate completion script",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		switch args[0] {
 		case "bash":
