@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/phergul/tfsnap/internal/autosave"
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/util"
 	"github.com/spf13/cobra"
@@ -17,9 +18,10 @@ import (
 var local bool
 
 var versionCmd = &cobra.Command{
-	Use:   "version <version>",
-	Short: "Change the version of the current terraform config",
-	Args:  cobra.ExactArgs(1),
+	Use:    "version <version>",
+	Short:  "Change the version of the current terraform config",
+	Args:   cobra.ExactArgs(1),
+	PreRun: autosave.PreRun,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.FromContext(cmd.Context())
 		if cfg == nil {

@@ -3,15 +3,17 @@ package snapshot
 import (
 	"fmt"
 
+	"github.com/phergul/tfsnap/internal/autosave"
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
 var LoadCmd = &cobra.Command{
-	Use:   "load <snapshot-name>",
-	Short: "Load a previously saved snapshot",
-	Args:  cobra.ExactArgs(1),
+	Use:    "load <snapshot-name>",
+	Short:  "Load a previously saved snapshot",
+	Args:   cobra.ExactArgs(1),
+	PreRun: autosave.PreRun,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.FromContext(cmd.Context())
 		if cfg == nil {

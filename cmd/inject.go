@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/phergul/tfsnap/internal/autosave"
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/inject"
 	"github.com/phergul/tfsnap/internal/util"
@@ -17,9 +18,10 @@ var localProvider bool
 var dependency bool
 
 var injectCmd = &cobra.Command{
-	Use:   "inject <resource1>, <resource2>...",
-	Short: "Manage resources example injections",
-	Args:  cobra.MinimumNArgs(1),
+	Use:    "inject <resource1>, <resource2>...",
+	Short:  "Manage resources example injections",
+	Args:   cobra.MinimumNArgs(1),
+	PreRun: autosave.PreRun,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.FromContext(cmd.Context())
 		if cfg == nil {

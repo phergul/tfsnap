@@ -5,15 +5,17 @@ import (
 	"log"
 	"strings"
 
+	"github.com/phergul/tfsnap/internal/autosave"
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/phergul/tfsnap/internal/snapshot"
 	"github.com/spf13/cobra"
 )
 
 var DeleteCmd = &cobra.Command{
-	Use:   "delete <snapshot-name>",
-	Short: "Delete a saved snapshot",
-	Args:  cobra.ExactArgs(1),
+	Use:    "delete <snapshot-name>",
+	Short:  "Delete a saved snapshot",
+	Args:   cobra.ExactArgs(1),
+	PreRun: autosave.PreRun,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.FromContext(cmd.Context())
 		if cfg == nil {

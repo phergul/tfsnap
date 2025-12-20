@@ -57,11 +57,12 @@ func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bo
 		return nil, nil
 	}
 
-	schemaKey := registrySource
+	schemaKey := strings.ToLower(registrySource)
 	if !localProvider {
-		schemaKey = "registry.terraform.io/" + registrySource
+		schemaKey = "registry.terraform.io/" + schemaKey
 	}
 
+	fmt.Printf("Looking for provider schema with key: %s\n", schemaKey)
 	providerSchema, ok := schemas.Schemas[schemaKey]
 	if !ok {
 		return nil, fmt.Errorf("provider schema not found")
