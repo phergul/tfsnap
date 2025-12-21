@@ -14,23 +14,19 @@ import (
 func InjectSkeleton(cfg *config.Config, schema *tfjson.Schema, resourceType string) error {
 	tfPath := filepath.Join(cfg.WorkingDirectory, "main.tf")
 
-	resource, err := buildSkeleton(schema, resourceType)
-	if err != nil {
-		return fmt.Errorf("error building skeleton for %s", resourceType)
-	}
+	resource := buildSkeleton(schema, resourceType)
 
 	return writeResourceToFile(tfPath, resource)
 }
 
-func buildSkeleton(schema *tfjson.Schema, resourceType string) (string, error) {
+func buildSkeleton(schema *tfjson.Schema, resourceType string) string {
 	var resource strings.Builder
 
 	resource.WriteString(fmt.Sprintf("resource \"%s\" \"test\" {\n", resourceType))
 	resource.WriteString(renderBlock(schema.Block, 1))
 	resource.WriteString("}\n")
 
-	// TODO: this error is never returned, maybe some check to see if the resource is valid?
-	return resource.String(), nil
+	return resource.String()
 }
 
 func renderBlock(block *tfjson.SchemaBlock, indent int) string {
