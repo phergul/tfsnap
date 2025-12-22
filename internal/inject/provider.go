@@ -14,7 +14,7 @@ import (
 	"github.com/phergul/tfsnap/internal/util"
 )
 
-const tempDir = "./tmp-module"
+var tempDir = filepath.Join(os.TempDir(), "tfsnap_tmp_module")
 
 func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bool) (*tfjson.ProviderSchema, error) {
 	version = strings.TrimPrefix(version, "v")
@@ -44,9 +44,8 @@ func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bo
 	log.Println("Initialising temp module...")
 	errs := terraformInit(tempDir)
 	if errs != nil {
-		fmt.Println(errs[0])
 		log.Println(errs[1])
-		return nil, nil
+		return nil, errs[0]
 	}
 
 	log.Println("Loading provider schemas...")
@@ -81,7 +80,7 @@ func createTempModule(name, source, dir, version string) error {
 	var temp string
 	if version != "" {
 		temp = fmt.Sprintf(`
-		terraform {
+terraform {
   required_providers {
     %s = {
       source = "%s"
@@ -101,7 +100,7 @@ terraform {
 }
 `, name, source)
 	}
-	log.Println("writing temp module to 'tmp/main.tf'")
+	log.Printf("writing temp module to '%s'", tempDir)
 	if err := os.WriteFile(filepath.Join(dir, "main.tf"), []byte(temp), 0644); err != nil {
 		return fmt.Errorf("failed to write temp module: %v", err)
 	}
@@ -113,7 +112,7 @@ func terraformInit(dir string) []error {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return []error{fmt.Errorf("terraform init failed; check logs for details"), fmt.Errorf("%s", string(out))}
+		return []error{fmt.Errorf("terraform init failed; check logs for details"), fmt.Errorf("error on init in temp module: %s", string(out))}
 	}
 	return nil
 }
@@ -123,6 +122,7 @@ func loadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		log.Printf("ERROR: terraform providers schema output: %s", string(out))
 		return nil, fmt.Errorf("failed to load provider schemas: %v", err)
 	}
 

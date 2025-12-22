@@ -10,7 +10,7 @@ import (
 
 var restoreCmd = &cobra.Command{
 	Use:   "restore",
-	Short: "Restore a snapshot",
+	Short: "Restore autosaved snapshot",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.FromContext(cmd.Context())
