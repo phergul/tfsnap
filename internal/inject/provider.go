@@ -1,6 +1,7 @@
 package inject
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -61,7 +62,7 @@ func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bo
 		schemaKey = "registry.terraform.io/" + schemaKey
 	}
 
-	fmt.Printf("Looking for provider schema with key: %s\n", schemaKey)
+	log.Printf("Looking for provider schema with key: %s\n", schemaKey)
 	providerSchema, ok := schemas.Schemas[schemaKey]
 	if !ok {
 		return nil, fmt.Errorf("provider schema not found")
@@ -120,14 +121,18 @@ func terraformInit(dir string) []error {
 func loadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
 	cmd := exec.Command("terraform", "providers", "schema", "-json")
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
 	if err != nil {
-		log.Printf("ERROR: terraform providers schema output: %s", string(out))
-		return nil, fmt.Errorf("failed to load provider schemas: %v", err)
+		return nil, fmt.Errorf("terraform error: %v, stderr: %s", err, stderr.String())
 	}
 
 	var schemas tfjson.ProviderSchemas
-	if err := json.Unmarshal(out, &schemas); err != nil {
+	if err := json.Unmarshal(stdout.Bytes(), &schemas); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal provider schemas: %v", err)
 	}
 	return &schemas, nil
