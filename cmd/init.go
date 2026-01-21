@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template/parse"
 
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/spf13/cobra"
@@ -45,8 +46,14 @@ var initCmd = &cobra.Command{
 		} else {
 			reader := bufio.NewReader(os.Stdin)
 
-			providerName := prompt(reader, "Enter provider name (e.g., aws)")
-			providerDir := prompt(reader, "Enter provider directory path")
+			providerDir := prompt(reader, "Enter your terraform provider directory path (e.g., ~/dev/terraform-provider-aws)")
+			fullProviderDir, err := buildProviderDir(providerDir)
+			if err != nil {
+				return err
+			}
+
+			providerName := parseProviderName(fullProviderDir)
+
 			localSource := prompt(reader, "Enter local source mapping")
 			registrySource := prompt(reader, "Enter registry source mapping")
 
@@ -84,22 +91,34 @@ func init() {
 	initCmd.Flags().StringVarP(&configFileFlag, "config", "c", "", "Load tfsnap config from YAML file")
 }
 
-func buildProviderDir(dir string) string {
+func buildProviderDir(dir string) (string, error) {
 	if dir == "" {
-		return ""
+		return "", fmt.Errorf("provider directory is required")
 	}
 	if filepath.IsAbs(dir) {
-		return dir
+		return dir, nil
+	} else if strings.HasPrefix(dir, "~") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get user home directory: %w", err)
+		}
+		return filepath.Join(homeDir, dir[1:]), nil
 	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return dir
-	}
-	return filepath.Join(wd, dir)
+	
+	return "", fmt.Errorf("provider directory must be an absolute path or start with ~")
 }
 
 func prompt(reader *bufio.Reader, message string) string {
 	fmt.Print(message + ": ")
 	input, _ := reader.ReadString('\n')
 	return strings.TrimSpace(input)
+}
+
+func parseProviderName(providerDir string) string {
+	base := filepath.Base(providerDir)
+	parts := strings.Split(base, "-")
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+	return base
 }
