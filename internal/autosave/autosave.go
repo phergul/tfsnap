@@ -17,9 +17,13 @@ func PreRun(cmd *cobra.Command, args []string) {
 	}
 	log.Println("AUTOSAVING SNAPSHOT...")
 
-	config := config.FromContext(cmd.Context())
+	cfg := config.FromContext(cmd.Context())
+	if cfg == nil {
+		log.Println("Config not found in context, skipping autosave")
+		return
+	}
 
-	autosaveSnapshot(config)
+	autosaveSnapshot(cfg)
 	log.Println("AUTOSAVE COMPLETE")
 }
 

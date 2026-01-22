@@ -41,6 +41,7 @@ var injectCmd = &cobra.Command{
 		}
 		if schema == nil {
 			fmt.Println("Injection failed: provider schema is nil")
+			return
 		}
 
 		for _, resourceName := range args {
