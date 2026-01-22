@@ -1,4 +1,4 @@
-# tfsnap - WIP
+# tfsnap
 
 A CLI tool for managing Terraform configurations during provider development.
 
@@ -19,10 +19,9 @@ tfsnap init
 ```
 
 This will prompt you for:
-- Provider name (e.g., `aws`, `google`, `azurerm`)
-- Provider directory path (path to your local provider source)
-- Local source mapping (e.g., `local.com/provider/name`)
-- Registry source mapping (e.g., `hashicorp/aws`)
+- Provider directory path (path to your local provider source code)
+
+Optionally configure a custom local source for provider development.
 
 Alternatively, load from a config file:
 
@@ -71,25 +70,57 @@ tfsnap snapshot save my-snapshot --include-git
 
 ### 4. Manage Snapshots
 
+Browse, load, and delete snapshots using the interactive TUI:
+
 ```bash
-# List all snapshots
-tfsnap snapshot list
+# Open snapshot management interface
+tfsnap snapshot
+```
 
-# List with detailed resource information
-tfsnap snapshot list --detailed
+The TUI provides:
+- Browse all snapshots with detailed information displayed in the right pane
+- Press `Enter` to load a snapshot (creates autosave before loading)
+- Press `d` to delete a snapshot
+- Navigate with arrow keys or `j`/`k`
+- Press `q` or `Esc` to quit
 
-# Load a snapshot
-tfsnap snapshot load my-snapshot
+### 5. Manage Templates
 
-# Delete a snapshot
-tfsnap snapshot delete my-snapshot
+Save and reuse resource configurations as templates using the interactive TUI:
+
+```bash
+# Save a resource from main.tf as a template
+tfsnap template save my-template
+
+# Browse, inject, or delete templates
+tfsnap template
+```
+
+The template TUI provides:
+- Browse all saved templates with resource content preview
+- Press `Enter` to inject a template into main.tf
+- Press `d` to delete a template
+- Navigate with arrow keys or `j`/`k`
+- Press `q` or `Esc` to quit
+
+### 6. Additional Commands
+
+```bash
+# Restore autosaved snapshot
+tfsnap restore
+
+# Clean up terraform files
+tfsnap clean
+
+# Clean up excluding specific files
+tfsnap clean --exclude .terraform.lock.hcl
 ```
 
 ## Commands
 
 ### `tfsnap init`
 
-Initialize tfsnap in the current directory.
+Initialize tfsnap in the current directory. Automatically detects provider information from the provider directory.
 
 **Flags:**
 - `-c, --config <file>`: Load configuration from a YAML file
@@ -104,6 +135,16 @@ Inject Terraform resource examples into your configuration.
 - `-l, --local`: Use local provider binary
 - `-d, --dependencies`: Include dependent resources
 
+### `tfsnap snapshot`
+
+Open the interactive snapshot management interface. Browse snapshots with detailed information including creation time, provider details, git information, and resource counts. Load or delete snapshots directly from the TUI.
+
+**Actions:**
+- `Enter`: Load the selected snapshot
+- `d`: Delete the selected snapshot
+- `↑/↓` or `j/k`: Navigate between snapshots
+- `q` or `Esc`: Quit
+
 ### `tfsnap snapshot save <name>`
 
 Save the current Terraform configuration as a snapshot.
@@ -112,32 +153,39 @@ Save the current Terraform configuration as a snapshot.
 - `-d, --description <text>`: Add a description to the snapshot
 - `-b, --include-binary`: Include the provider binary
 - `-g, --include-git`: Include git branch and commit information
+- `-p, --persist`: Persist the saved configuration instead of clearing it
 
-### `tfsnap snapshot load <name>`
+### `tfsnap template`
 
-Restore a previously saved snapshot.
+Open the interactive template management interface. Browse saved resource templates and inject them into main.tf or delete them.
 
-### `tfsnap snapshot list`
+**Actions:**
+- `Enter`: Inject the selected template into main.tf
+- `d`: Delete the selected template
+- `↑/↓` or `j/k`: Navigate between templates
+- `q` or `Esc`: Quit
 
-List all saved snapshots.
+### `tfsnap template save <name>`
+
+Save a resource from main.tf as a reusable template. Opens a TUI to select which resource to save.
+
+### `tfsnap restore`
+
+Restore the automatically saved snapshot. tfsnap creates autosaves before operations that modify your configuration.
+
+### `tfsnap clean`
+
+Clean up local Terraform files including .terraform.lock.hcl, terraform.tfstate, and terraform.tfstate.backup.
 
 **Flags:**
-- `-d, --detailed`: Show detailed resource information
-
-### `tfsnap snapshot delete <name>`
-
-Delete a snapshot.
+- `-e, --exclude <file>`: Files to exclude from cleanup (can be specified multiple times)
 
 ### `tfsnap version <version>`
 
-Change the provider version for the current snapshot.
+Change the provider version for the current configuration.
 
 **Flags:**
-- `-l`, `--local`: Use local provider version
-
-### `tfsnap completion`
-
-Generate shell completion scripts for bash or zsh.
+- `-l, --local`: Use local provider version
 
 ## Configuration
 
