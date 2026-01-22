@@ -18,6 +18,15 @@ import (
 const DefaultClient = "registry"
 
 func ValidateResource(schema *tfjson.ProviderSchema, input string) (*tfjson.Schema, bool) {
+	if schema == nil {
+		log.Println("Provider schema is nil")
+		return nil, false
+	}
+	if schema.ResourceSchemas == nil {
+		log.Println("Provider schema has no resource schemas (nil)")
+		return nil, false
+	}
+
 	resourceSchema, ok := schema.ResourceSchemas[input]
 	if !ok {
 		return nil, ok

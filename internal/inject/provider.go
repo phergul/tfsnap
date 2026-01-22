@@ -24,10 +24,12 @@ func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bo
 	cache := util.GetCache[tfjson.ProviderSchema](cfg.WorkingDirectory, "provider_schema")
 	if !localProvider {
 		schema, err := cache.Get(cacheKey)
-		if err == nil {
+		if err == nil && schema != nil {
 			return schema, nil
 		}
-		log.Println(err)
+		if err != nil {
+			log.Printf("failed to retrieve provider schema from cache: %v", err)
+		}
 	}
 
 	registrySource := cfg.Provider.SourceMapping.RegistrySource
@@ -35,7 +37,12 @@ func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bo
 		registrySource = cfg.Provider.SourceMapping.LocalSource
 	}
 
-	os.MkdirAll(tempDir, 0755)
+	if err := os.RemoveAll(tempDir); err != nil {
+        log.Printf("warning: failed to clean temp dir: %v", err)
+    }
+    if err := os.MkdirAll(tempDir, 0o755); err != nil {
+        return nil, fmt.Errorf("failed to create temp dir: %w", err)
+    }
 
 	err := createTempModule(cfg.Provider.Name, registrySource, tempDir, version)
 	if err != nil {
@@ -54,19 +61,25 @@ func RetrieveProviderSchema(cfg *config.Config, version string, localProvider bo
 	if err != nil {
 		fmt.Println("Injection failed: error loading provider schemas")
 		log.Println(err)
-		return nil, nil
+		return nil, fmt.Errorf("injection failed: error loading provider schemas: %w", err)
 	}
 
-	schemaKey := strings.ToLower(registrySource)
-	if !localProvider {
-		schemaKey = "registry.terraform.io/" + schemaKey
+	providerSchema, key, err := resolveProviderSchemaKey(schemas, cfg)
+	if err != nil {
+		return nil, err
 	}
+	log.Printf("Resolved provider schema  key: %s\n", key)
 
-	log.Printf("Looking for provider schema with key: %s\n", schemaKey)
-	providerSchema, ok := schemas.Schemas[schemaKey]
-	if !ok {
-		return nil, fmt.Errorf("provider schema not found")
-	}
+	// schemaKey := strings.ToLower(registrySource)
+	// if !localProvider {
+	// 	schemaKey = "registry.terraform.io/" + schemaKey
+	// }
+
+	// log.Printf("Looking for provider schema with key: %s\n", schemaKey)
+	// providerSchema, ok := schemas.Schemas[schemaKey]
+	// if !ok {
+	// 	return nil, fmt.Errorf("provider schema not found")
+	// }
 
 	if !localProvider {
 		if err := cache.Set(cacheKey, *providerSchema); err != nil {
@@ -84,7 +97,7 @@ func createTempModule(name, source, dir, version string) error {
 terraform {
   required_providers {
     %s = {
-      source = "%s"
+      source  = "%s"
 	  version = "%s"
     }
   }
@@ -136,6 +149,91 @@ func loadProviderSchemas(dir string) (*tfjson.ProviderSchemas, error) {
 		return nil, fmt.Errorf("failed to unmarshal provider schemas: %v", err)
 	}
 	return &schemas, nil
+}
+
+func resolveProviderSchemaKey(schemas *tfjson.ProviderSchemas, cfg *config.Config) (*tfjson.ProviderSchema, string, error) {
+    if schemas == nil || schemas.Schemas == nil || len(schemas.Schemas) == 0 {
+        return nil, "", fmt.Errorf("no provider schemas returned by terraform")
+    }
+
+    regSrc := strings.ToLower(cfg.Provider.SourceMapping.RegistrySource)
+    locSrc := strings.ToLower(cfg.Provider.SourceMapping.LocalSource)
+
+    candidates := []string{}
+    if regSrc != "" {
+        candidates = append(candidates,
+            "registry.terraform.io/"+regSrc,
+            regSrc,
+        )
+    }
+    if locSrc != "" {
+        candidates = append(candidates,
+            "registry.terraform.io/"+locSrc,
+            locSrc,
+        )
+    }
+
+    for _, k := range candidates {
+        if ps, ok := schemas.Schemas[k]; ok && ps != nil {
+            return ps, k, nil
+        }
+    }
+
+    if len(schemas.Schemas) == 1 {
+        for k, ps := range schemas.Schemas {
+            if ps != nil {
+                return ps, k, nil
+            }
+        }
+    }
+
+    nsNameSuffix := ""
+    if regSrc != "" {
+        parts := strings.Split(regSrc, "/")
+        if len(parts) >= 2 {
+            nsNameSuffix = "/" + parts[len(parts)-2] + "/" + parts[len(parts)-1]
+        }
+    } else if locSrc != "" {
+        parts := strings.Split(locSrc, "/")
+        if len(parts) >= 2 {
+            nsNameSuffix = "/" + parts[len(parts)-2] + "/" + parts[len(parts)-1]
+        }
+    }
+    if nsNameSuffix != "" {
+        for k, ps := range schemas.Schemas {
+            if strings.HasSuffix(strings.ToLower(k), nsNameSuffix) && ps != nil {
+                return ps, k, nil
+            }
+        }
+    }
+
+    providerName := strings.ToLower(cfg.Provider.Name)
+    if providerName != "" {
+        var matchKey string
+        var matchVal *tfjson.ProviderSchema
+        for k, ps := range schemas.Schemas {
+            if ps == nil {
+                continue
+            }
+            if strings.HasSuffix(strings.ToLower(k), "/"+providerName) {
+                if matchKey != "" {
+                    matchKey = ""
+                    break
+                }
+                matchKey = k
+                matchVal = ps
+            }
+        }
+        if matchKey != "" && matchVal != nil {
+            return matchVal, matchKey, nil
+        }
+    }
+
+    keys := make([]string, 0, len(schemas.Schemas))
+    for k := range schemas.Schemas {
+        keys = append(keys, k)
+    }
+    return nil, "", fmt.Errorf("provider schema not found. tried: %q; available: %v", candidates, keys)
 }
 
 func CleanupTempDir() error {

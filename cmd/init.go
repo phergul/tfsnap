@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/template/parse"
 
 	"github.com/phergul/tfsnap/internal/config"
 	"github.com/spf13/cobra"
@@ -53,11 +52,28 @@ var initCmd = &cobra.Command{
 			}
 
 			providerName := parseProviderName(fullProviderDir)
+			if providerName == "" {
+				return fmt.Errorf("failed to parse provider name from directory")
+			}
+			fmt.Printf("Detected provider name: %s\n", providerName)
+			namespace := detectNamespace(fullProviderDir)
+			if namespace != "" {
+				fmt.Printf("Detected provider namespace: %s\n", namespace)
+			}
 
-			localSource := prompt(reader, "Enter local source mapping")
-			registrySource := prompt(reader, "Enter registry source mapping")
+			registryDefault := "registry.terraform.io/" + namespace + "/" + providerName
+			fmt.Printf("Using registry source: %s\n", registryDefault)
 
-			fullProviderDir := buildProviderDir(providerDir)
+			fmt.Print("Do you have a custom source for local provider development? (y/N): ")
+			choice, _ := reader.ReadString('\n')
+			choice = strings.ToLower(strings.TrimSpace(choice))
+
+			localSource := ""
+			if choice != "y" && choice != "yes" {
+				localSource = prompt(reader, fmt.Sprintf("Enter local source"))
+			} else {
+				localSource = ""
+			}
 
 			cfg = config.Config{
 				ConfigPath:       configFile,
@@ -67,7 +83,7 @@ var initCmd = &cobra.Command{
 					ProviderDirectory: fullProviderDir,
 					SourceMapping: config.SourceMapping{
 						LocalSource:    localSource,
-						RegistrySource: registrySource,
+						RegistrySource: registryDefault,
 					},
 				},
 			}
@@ -104,7 +120,7 @@ func buildProviderDir(dir string) (string, error) {
 		}
 		return filepath.Join(homeDir, dir[1:]), nil
 	}
-	
+
 	return "", fmt.Errorf("provider directory must be an absolute path or start with ~")
 }
 
@@ -121,4 +137,27 @@ func parseProviderName(providerDir string) string {
 		return parts[2]
 	}
 	return base
+}
+
+func detectNamespace(providerDir string) string {
+	if providerDir == "" {
+		return ""
+	}
+
+	goModPath := filepath.Join(providerDir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			if strings.HasPrefix(strings.TrimSpace(line), "module ") {
+				module := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "module "))
+				parts := strings.Split(module, "/")
+				if len(parts) >= 2 {
+					return parts[1]
+				}
+			}
+		}
+	}
+
+	return ""
 }

@@ -58,6 +58,7 @@ func init() {
 	rootCmd.AddCommand(injectCmd)
 	rootCmd.AddCommand(restoreCmd)
 	rootCmd.AddCommand(cleanCmd)
+	rootCmd.AddCommand(templateCmd)
 }
 
 func Execute() {
